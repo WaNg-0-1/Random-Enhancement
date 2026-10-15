@@ -65,16 +65,16 @@ public class PVESettings {
     }
     public static String label(int value) {
         switch (value) {
-            case OFF:  return "关闭";
-            case EASY: return "简单 (×1.0)";
-            case HARD: return "困难 (×2.0)";
-            default:   return "未知";
+            case OFF:  return Core.bundle.get("raen.difficulty.off");
+            case EASY: return Core.bundle.get("raen.difficulty.easy");
+            case HARD: return Core.bundle.get("raen.difficulty.hard");
+            default:   return Core.bundle.get("raen.difficulty.unknown");
         }
     }
     private static void registerSlider() {
         if (Vars.ui == null || Vars.ui.settings == null) return;
         try {
-            Vars.ui.settings.addCategory("PVE 随机强化", table -> {
+            Vars.ui.settings.addCategory(Core.bundle.get("raen.category"), table -> {
                 table.sliderPref(
                         KEY_DIFFICULTY,
                         DEFAULT,
