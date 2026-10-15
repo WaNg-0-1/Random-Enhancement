@@ -6,6 +6,10 @@ jobs:
   buildJar:
     runs-on: ubuntu-latest
 
+    # 创建 Release 需要写权限（较新仓库的 GITHUB_TOKEN 默认可能是只读）
+    permissions:
+      contents: write
+
     steps:
     - uses: actions/checkout@v4
     - name: Set up PATH
@@ -26,3 +30,20 @@ jobs:
         archive: false
         name: ${{ github.event.repository.name }}
         path: build/libs/${{ github.event.repository.name }}.jar
+
+    # ============================================================
+    # 以下步骤只在「推送 v* 标签」时执行。
+    # 普通 commit 推送 / PR 会被 if 条件跳过，只产出上面的 artifact。
+    # ============================================================
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        # 末尾的 [v160] 是 Mindustry mod 浏览器识别「目标游戏版本」用的，
+        # 方括号必须保留、且必须位于名字的开头或结尾。
+        # 之后升级到 build 161 时，把这里改成 [v161]。
+        name: "${{ github.event.repository.name }} ${{ github.ref_name }} [v160]"
+        tag_name: ${{ github.ref_name }}
+        draft: false
+        generate_release_notes: true
+        files: build/libs/${{ github.event.repository.name }}.jar

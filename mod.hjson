@@ -7,3 +7,4 @@ description: "一个给敌军提供随机强化的Java模组\n A Java mod that g
 version: 160.3.2
 minGameVersion: 160
 java: true
+repo: "wang-0-1/random-enhancement"
