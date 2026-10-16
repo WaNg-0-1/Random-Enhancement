@@ -4,7 +4,7 @@ name: "raen"
 author: "WaNg-0-1"
 main: "raen.raenMod"
 description: "一个给敌军提供随机强化的Java模组\n A Java mod that gives random buffs to the enemy army"
-version: 160.3.3
+version: 160.3.4
 minGameVersion: 160
 java: true
 repo: "wang-0-1/random-enhancement"

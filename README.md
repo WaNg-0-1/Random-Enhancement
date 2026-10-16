@@ -3,7 +3,6 @@
 给**敌方波次单位**随机挂上强化效果的 Mindustry Java 模组。每一波敌人身上的组合都不一样，偶尔会刷出同时挂着多种强化的「精英怪」。
 
 - **游戏版本**：Mindustry `v160` 及以上
-- **模组版本**：`160.3.1`
 - **平台**：桌面 / Android
 - **仓库**：<https://github.com/WaNg-0-1/Random-Enhancement>
 
