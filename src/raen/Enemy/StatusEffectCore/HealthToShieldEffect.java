@@ -8,9 +8,6 @@ import mindustry.type.StatusEffect;
 
 /**
  * 血量被削减时，把削减量按固定比例补成护盾。
- *
- * 结构参照 DamageReductionEffect（同样靠 lastHealth 快照检测掉血），
- * 区别是：不乘 lossRatio，比例是固定的；补的是护盾而不是血量；护盾无上限。
  */
 public class HealthToShieldEffect extends StatusEffect {
 

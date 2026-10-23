@@ -2,30 +2,25 @@ package raen.Enemy.StatusEffectCore;
 
 import arc.Events;
 import arc.math.Mathf;
+import arc.struct.IntMap;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
 import mindustry.Vars;
 import mindustry.entities.units.StatusEntry;
 import mindustry.game.EventType;
+import mindustry.game.Team;
 import mindustry.gen.Unit;
 import mindustry.type.StatusEffect;
 
 /**
  * 团队血量 / 护盾共享。
- *
- * 档位决定的是「谁有资格留在队里」，而不是从谁身上扣多少：
- *   低级  血量 > 75% 最大生命才留在队里
- *   中级  血量 > 50% 最大生命才留在队里
- *   高级  血量 > 1 点才留在队里
- * 每次结算前先判定血量，低于自己那一档门槛的直接退队，
- * 所以同一个队里可以混着不同档位的单位而互不干扰。
- *
- * 留在队里的单位：血量被拉平到同一百分比；护盾则是全队所有成员加起来平分。
  */
 public class TeamHealthEffect extends StatusEffect {
 
     /** 当前在队里的成员。用 Seq 是为了只用本工程已验证过的 arc API。 */
     private static final Seq<Unit> team = new Seq<>();
+    /** 按阵营分组的成员表，key = Team.id。 */
+    private static final IntMap<Seq<Unit>> teamGroups = new IntMap<>();
     /** 成员 → 它当前挂着的档位实例，用来读取该档位的入队门槛。 */
     private static final ObjectMap<Unit, TeamHealthEffect> sources = new ObjectMap<>();
 
@@ -67,7 +62,9 @@ public class TeamHealthEffect extends StatusEffect {
             unregister(unit);
             return;
         }
-        if (sources.get(unit) == null) team.add(unit);
+        if (sources.get(unit) == null) {
+            team.add(unit);
+        }
         sources.put(unit, source);
     }
 
@@ -77,6 +74,16 @@ public class TeamHealthEffect extends StatusEffect {
             if (team.get(i) == unit) team.remove(i);
         }
         sources.remove(unit);
+    }
+
+    private static Seq<Unit> groupOf(Team team) {
+        int id = team == null ? Team.derelict.id : team.id;
+        Seq<Unit> members = teamGroups.get(id);
+        if (members == null) {
+            members = new Seq<>();
+            teamGroups.put(id, members);
+        }
+        return members;
     }
 
     private static float thresholdOf(Unit unit, TeamHealthEffect source) {
@@ -100,29 +107,44 @@ public class TeamHealthEffect extends StatusEffect {
             }
         }
 
-        int n = team.size;
+        // 2) 每帧按单位当前阵营重新分组（单位有可能换队），各队独立结算。
+        for (Seq<Unit> members : teamGroups.values()) {
+            members.clear();
+        }
+        for (int i = 0; i < team.size; i++) {
+            Unit u = team.get(i);
+            groupOf(u.team).add(u);
+        }
+        for (Seq<Unit> members : teamGroups.values()) {
+            syncGroup(members);
+        }
+    }
+
+    /** 对同一阵营的成员拉平血量百分比、平分护盾。 */
+    private static void syncGroup(Seq<Unit> members) {
+        int n = members.size;
         if (n < 2) return;
 
-        // 2) 生命：全队拉平到同一血量百分比。
+        // 生命：全队拉平到同一血量百分比。
         float totalHealth = 0f;
         float totalMax    = 0f;
         for (int i = 0; i < n; i++) {
-            Unit u = team.get(i);
+            Unit u = members.get(i);
             totalHealth += u.health;
             totalMax += u.maxHealth;
         }
         float percent = (totalMax > 0f) ? totalHealth / totalMax : 0f;
 
-        // 3) 护盾：全部加起来，分给所有在队成员。
+        // 护盾：全部加起来，分给所有在队成员。
         float shieldPool = 0f;
         for (int i = 0; i < n; i++) {
-            shieldPool += team.get(i).shield;
+            shieldPool += members.get(i).shield;
         }
         float shieldShare = shieldPool / n;
 
-        // 4) 写回。
+        // 写回。
         for (int i = 0; i < n; i++) {
-            Unit u = team.get(i);
+            Unit u = members.get(i);
             if (u.dead() || !u.isValid()) continue;
             u.health = Mathf.clamp(percent * u.maxHealth, 0f, u.maxHealth);
             u.shield = shieldShare;

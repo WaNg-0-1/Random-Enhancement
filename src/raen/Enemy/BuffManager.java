@@ -11,12 +11,13 @@ import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.type.StatusEffect;
 public class BuffManager {
-    private static final float SCAN_INTERVAL = 5f * 59;
+    private static final float SCAN_INTERVAL = 2f * 59;
     private static final float BASE_DURATION   = 60f * 60f * 60f * 24f * 365f;
     private static StatusEffect[][] tierPools = null;  // 索引 = 效果等级（低 / 中 / 高）
     private static StatusEffect[]   allPool   = null;  // 全部效果，用于清理与判定
     private static StatusEffect[][] exclusiveGroups = null;  // 互斥组：同组效果不会共存
     private static int   lastDifficulty = -1;
+    private static boolean lastAllTeams = false;
     private static float scanTimer      = 0f;
     private BuffManager() {}
     public static void init() {
@@ -24,6 +25,7 @@ public class BuffManager {
         allPool   = raenStatusEffects.getAll();
         exclusiveGroups = raenStatusEffects.getExclusiveGroups();
         lastDifficulty = PVESettings.getDifficulty();
+        lastAllTeams   = PVESettings.isAllTeams();
 
         Events.on(EventType.UnitCreateEvent.class, event -> {
             if (!shouldRun() || event.unit == null) return;
@@ -39,8 +41,10 @@ public class BuffManager {
         if (!shouldRun()) return;
 
         int current = PVESettings.getDifficulty();
-        if (current != lastDifficulty) {
+        boolean allTeams = PVESettings.isAllTeams();
+        if (current != lastDifficulty || allTeams != lastAllTeams) {
             lastDifficulty = current;
+            lastAllTeams   = allTeams;
             resetAllBuffs();
         }
         scanTimer += Time.delta;
@@ -51,41 +55,30 @@ public class BuffManager {
     }
     private static void scanAndBuff() {
         if (!PVESettings.isEnabled()) return;
-        if (Vars.state == null || Vars.state.rules == null) return;
-        Team waveTeam = Vars.state.rules.waveTeam;
-        if (waveTeam == null) return;
 
         Groups.unit.each(unit -> {
-            if (unit == null) return;
-            if (unit.team != waveTeam) return;
-            if (unit.controller() instanceof mindustry.gen.Player) return;
-            if (!unit.isValid()) return;
+            if (!isTarget(unit)) return;
             if (!hasAnyBuff(unit)) applyRandomBuffs(unit);
         });
     }
     private static void resetAllBuffs() {
-        if (Vars.state == null || Vars.state.rules == null) return;
-        Team waveTeam = Vars.state.rules.waveTeam;
-        if (waveTeam == null) return;
-
         Groups.unit.each(unit -> {
-            if (unit == null) return;
-            if (unit.team != waveTeam) return;
-            if (unit.controller() instanceof mindustry.gen.Player) return;
-            if (!unit.isValid()) return;
+            if (unit == null || !unit.isValid()) return;
+            // 先无条件清掉所有强化：关闭「作用于所有单位」时，
+            // 之前挂在友方单位身上的效果也必须一起消失。
             if (allPool != null) {
                 for (StatusEffect effect : allPool) {
                     if (effect == null) continue;
                     if (unit.hasEffect(effect)) unit.unapply(effect);
                 }
             }
-            applyRandomBuffs(unit);
+            if (isTarget(unit)) applyRandomBuffs(unit);
         });
     }
     private static void applyRandomBuffs(Unit unit) {
         if (!PVESettings.isEnabled()) return;
         if (unit == null || tierPools == null || tierPools.length == 0) return;
-        if (!isEnemy(unit)) return;
+        if (!isTarget(unit)) return;
         if (hasAnyBuff(unit)) return;
 
         int count     = PVESettings.getEffectCap(getUnitTier(unit));
@@ -93,6 +86,14 @@ public class BuffManager {
         if (count <= 0) return;
 
         Seq<StatusEffect> chosen = new Seq<>();
+        // 分裂产生的子单位不再吃分裂效果：它们的血量本来就低于门槛，
+        // 一旦拿到就会在下一帧立刻再分裂，一代代增殖。
+        // 预先塞进 chosen，三个档位就全部不可选了（chosen 同时也参与降级回退的排除）。
+        if (raen.Enemy.StatusEffectCore.SplitEffect.isSplitChild(unit)) {
+            chosen.add(raenStatusEffects.SplitA);
+            chosen.add(raenStatusEffects.SplitB);
+            chosen.add(raenStatusEffects.SplitC);
+        }
         for (int i = 0; i < count; i++) {
             // 每个效果独立掷一次等级
             StatusEffect effect = pickEffect(PVESettings.rollTier(), chosen);
@@ -160,14 +161,20 @@ public class BuffManager {
         }
         return true;
     }
-    private static boolean isEnemy(Unit unit) {
+    /**
+     * 该单位是否应当获得随机强化。
+     * 默认只认敌方波次单位；开启「作用于所有单位」后不再按队伍筛选。
+     */
+    private static boolean isTarget(Unit unit) {
         if (unit == null || Vars.state == null || Vars.state.rules == null) return false;
+        if (!unit.isValid()) return false;
+        if (raen.Enemy.StatusEffectCore.Wingman.isDrone(unit)) return false;
+        if (PVESettings.isAllTeams()) return true;
         Team waveTeam = Vars.state.rules.waveTeam;
         if (waveTeam == null) return false;
         if (unit.team != waveTeam) return false;
         if (unit.controller() instanceof mindustry.gen.Player) return false;
-        if (raen.Enemy.StatusEffectCore.Wingman.isDrone(unit)) return false;
-        return unit.isValid();
+        return true;
     }
     private static boolean hasAnyBuff(Unit unit) {
         if (unit == null || allPool == null) return false;

@@ -5,6 +5,8 @@ import mindustry.Vars;
 import mindustry.game.EventType;
 public class PVESettings {
     public static final String KEY_DIFFICULTY = "raen-pve-difficulty";
+    /** 「作用于所有单位」开关，默认关闭。 */
+    public static final String KEY_ALL_TEAMS  = "raen-pve-all-teams";
     public static final int OFF    = 0;
     public static final int EASY   = 1;
     public static final int HARD   = 2;
@@ -39,6 +41,14 @@ public class PVESettings {
     }
     public static boolean isEnabled() {
         return getDifficulty() != OFF;
+    }
+    /**
+     * 强化是否作用于所有队伍的单位。
+     * 默认关闭：只给敌方波次单位挂效果；开启后不再按队伍筛选。
+     */
+    public static boolean isAllTeams() {
+        if (Core.settings == null) return false;
+        return Core.settings.getBool(KEY_ALL_TEAMS, false);
     }
     public static float getDifficultyMultiplier() {
         switch (getDifficulty()) {
@@ -82,6 +92,8 @@ public class PVESettings {
                         HARD,
                         PVESettings::label
                 );
+                // 难度滑块下方的开关：开启后强化从「仅敌方」变为「所有队伍」。
+                table.checkPref(KEY_ALL_TEAMS, false);
             });
         } catch (Exception e) {
             arc.util.Log.err("raen-pve: 难度滑块注册失败", e);

@@ -7,9 +7,6 @@ import mindustry.type.StatusEffect;
 
 /**
  * 有盾、且血量不满时，持续把护盾按比例转成血量。
- *
- * shieldPerSecond 是每秒消耗的护盾，healthPerSecond 是每秒换回的血量，
- * 两者之比就是「一点盾换多少血」；护盾见底时会按剩余量等比折算，不会透支。
  */
 public class ShieldToHealthEffect extends StatusEffect {
 
