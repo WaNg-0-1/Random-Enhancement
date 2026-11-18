@@ -3,7 +3,7 @@ displayName: " 随机强化 \n Random Enhancement"
 name: "raen"
 author: "WaNg-0-1"
 main: "raen.raenMod"
-description: "一个给敌军提供随机强化的Java模组\n A Java mod that gives random buffs to the enemy army"
+description: "一个给单位或子弹提供随机强化的Java模组\n A Java mod that gives random buffs to units or bullets"
 version: 160.3.92
 minGameVersion: 160
 java: true
