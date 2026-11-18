@@ -50,23 +50,3 @@
 仓库已配置 CI（[`.github/workflows/commitTest.yml`](.github/workflows/commitTest.yml)），每次 push / PR 都会自动执行 `./gradlew deploy` 并把产物上传为 Artifact，名称即仓库名。
 
 > Windows 下使用 `gradlew.bat`；Linux / macOS 下若 `./gradlew` 无执行权限，先 `chmod +x gradlew`。
-
-### 发布 Release（推送 `v` 开头的 tag）
-
-CI 在 **ref 以 `refs/tags/v` 开头**时会额外创建 GitHub Release。发版三步：
-
-```bash
-# ① 改 mod.hjson 的 version（tag 名要和它一致）
-#    version: 160.3.92  →  160.3.93
-# ② 提交并打 tag
-git add -A && git commit -m "160，3，93"
-git tag v160.3.93
-# ③ 推送（tag 必须带上，否则不会建 Release）
-git push origin master && git push origin v160.3.93
-```
-
-推完后 Actions 自动构建 + 创建 Release（名字形如 `Random-Enhancement v160.3.93 [v160]`）。
-
-> ⚠ **tag 必须以 `v` 开头**，否则只产 Artifact、不建 Release。
-> ⚠ **Release 名末尾的 `[v160]` 不能去掉** —— Mindustry 模组浏览器靠它识别目标游戏版本。
-> ⚠ 只推 `master` 不打 tag = 只更新 Actions Artifact，**不会**更新 Release。
