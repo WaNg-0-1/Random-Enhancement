@@ -103,7 +103,6 @@ public class BulletOrbitEffect extends StatusEffect {
             float radialSpeed = (orbit - dist) * radialK;
             float maxRadial = Math.max(dist * 0.5f, 4f);
             radialSpeed = Mathf.clamp(radialSpeed, -maxRadial, maxRadial);
-
             bullet.vel.set(-ny * tangSpeed + nx * radialSpeed, nx * tangSpeed + ny * radialSpeed);
         });
     }

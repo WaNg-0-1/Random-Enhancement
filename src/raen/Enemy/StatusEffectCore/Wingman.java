@@ -16,6 +16,8 @@ public class Wingman extends StatusEffect {
     private static final ObjectMap<Unit, Seq<Unit>> droneMap = new ObjectMap<>();
     private static final ObjectMap<Unit, Integer> targetCountMap = new ObjectMap<>();
     private static final ObjectMap<Unit, Float> spawnTimerMap = new ObjectMap<>();
+    /** 所有僚机效果实例：用来判断某个单位身上挂的最高是哪一档。 */
+    private static final Seq<Wingman> instances = new Seq<>();
     /** 每补充一架僚机的间隔：10 秒（60 tick/秒）。改这里即可调整节奏。 */
     private static final float SPAWN_INTERVAL = 60f * 10f;
     public int maxDronesPerUnit;
@@ -26,6 +28,7 @@ public class Wingman extends StatusEffect {
         this.transitionDamage = 0f;
         this.permanent = true;
         this.color = Pal.sap;
+        instances.add(this);
     }
     public static void hardResetAll() {
         for (Seq<Unit> drones : droneMap.values()) {
@@ -53,10 +56,25 @@ public class Wingman extends StatusEffect {
     public static boolean isDrone(Unit unit) {
         return unit != null && unit.controller() instanceof WingmanAI;
     }
+    /** 本档是否是该单位身上挂的最高档僚机效果。 */
+    private boolean isTopTier(Unit unit) {
+        for (Wingman other : instances) {
+            if (other == this) continue;
+            if (other.maxDronesPerUnit <= maxDronesPerUnit) continue;
+            // 用 getDuration 判定「当前真的挂着」（直接查 statuses 列表，
+            // 不受 gen UnitEntity / 组件 StatusComp 两条路径差异影响）。
+            if (unit.getDuration(other) > 0f) return false;
+        }
+        return true;
+    }
     @Override
     public void update(Unit unit, StatusEntry entry) {
         if (unit == null || unit.dead()) return;
         if (isDrone(unit)) return;
+        // 三档共用同一份无人机表：万一同一单位同时挂了两档（例如互斥判定被绕过），
+        // 两档会互相「补足 / 砍掉」僚机。这里让低档直接让位给高档，
+        // 僚机数量始终由最高档说了算，不会出现两档打架。
+        if (!isTopTier(unit)) return;
         if (WingmanCleanup.pendingCleanup) {
             WingmanCleanup.executeCleanup();
         }

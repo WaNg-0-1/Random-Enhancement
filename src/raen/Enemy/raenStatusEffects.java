@@ -50,6 +50,14 @@ public class raenStatusEffects {
     // ---- 回收：范围内有单位死亡时抢它的武器（不分敌我），限时使用 ----
     public static StatusEffect SalvageA, SalvageB, SalvageC;              // 10格/1槽/存5/3秒、15格/2槽/存7/4秒、20格/3槽/存9/5秒
 
+    // ---- 标印：给范围内的己方子弹附加随机标签 ----
+    public static StatusEffect MarkRandomA, MarkRandomB, MarkRandomC;     // 6/10/14 格，1/2/3 标签，实时随机
+    public static StatusEffect MarkFixedA, MarkFixedB, MarkFixedC;        // 6/10/14 格，1/2/3 标签，获得时抽取并固定
+
+    // ---- 进攻：持续攻击累积倍率，攻击 / 攻速两条路线 ----
+    public static StatusEffect OffenseAtkA, OffenseAtkB, OffenseAtkC;     // 攻击 200%/400%/600%，移速血量 25%
+    public static StatusEffect OffenseRateA, OffenseRateB, OffenseRateC;  // 攻速 200%/400%/600%，移速血量 25%
+
     // ---- 12 个纯数值效果 ----
     public static StatusEffect SpeedA,  SpeedB,  SpeedC;   // 速度 +12.5% / +25% / +50%
     public static StatusEffect HealthA, HealthB, HealthC;  // 生命 +12.5% / +25% / +50%
@@ -106,6 +114,10 @@ public class raenStatusEffects {
     private static final Color COLOR_MIGHTY  = Color.valueOf("c1121f");   // 势大力沉
     private static final Color COLOR_DISTORT = Color.valueOf("c6ff4d");   // 扭曲
     private static final Color COLOR_SALVAGE = Color.valueOf("7dd3b0");   // 回收
+    private static final Color COLOR_MARK_RANDOM = Color.valueOf("d4ff66");  // 标印·随机
+    private static final Color COLOR_MARK_FIXED  = Color.valueOf("a8e600");  // 标印·固定
+    private static final Color COLOR_OFFENSE_ATK  = Color.valueOf("e64a19"); // 进攻·攻击
+    private static final Color COLOR_OFFENSE_RATE = Color.valueOf("ffb300"); // 进攻·攻速
 
     public static void load() {
         // ============ 减伤：低级 25% / 中级 50% / 高级 75% ============
@@ -259,6 +271,32 @@ public class raenStatusEffects {
         addToContent(SalvageB);
         SalvageC = makeSalvage("SalvageC", 20f, 3, 9, 5f, COLOR_SALVAGE);
         addToContent(SalvageC);
+        // ============ 标印：6/10/14 格，每颗子弹 1/2/3 个标签，随机 / 固定两种 ============
+        MarkRandomA = makeMark("MarkRandomA", 6f, 1, false, COLOR_MARK_RANDOM);
+        addToContent(MarkRandomA);
+        MarkRandomB = makeMark("MarkRandomB", 10f, 2, false, COLOR_MARK_RANDOM);
+        addToContent(MarkRandomB);
+        MarkRandomC = makeMark("MarkRandomC", 14f, 3, false, COLOR_MARK_RANDOM);
+        addToContent(MarkRandomC);
+        MarkFixedA = makeMark("MarkFixedA", 6f, 1, true, COLOR_MARK_FIXED);
+        addToContent(MarkFixedA);
+        MarkFixedB = makeMark("MarkFixedB", 10f, 2, true, COLOR_MARK_FIXED);
+        addToContent(MarkFixedB);
+        MarkFixedC = makeMark("MarkFixedC", 14f, 3, true, COLOR_MARK_FIXED);
+        addToContent(MarkFixedC);
+        // ============ 进攻：连续攻击 60 秒蓄满，攻击 / 攻速各三档 ============
+        OffenseAtkA = makeOffense("OffenseAtkA", raen.Enemy.StatusEffectCore.OffenseEffect.Kind.DAMAGE, 2f, COLOR_OFFENSE_ATK);
+        addToContent(OffenseAtkA);
+        OffenseAtkB = makeOffense("OffenseAtkB", raen.Enemy.StatusEffectCore.OffenseEffect.Kind.DAMAGE, 4f, COLOR_OFFENSE_ATK);
+        addToContent(OffenseAtkB);
+        OffenseAtkC = makeOffense("OffenseAtkC", raen.Enemy.StatusEffectCore.OffenseEffect.Kind.DAMAGE, 6f, COLOR_OFFENSE_ATK);
+        addToContent(OffenseAtkC);
+        OffenseRateA = makeOffense("OffenseRateA", raen.Enemy.StatusEffectCore.OffenseEffect.Kind.RELOAD, 2f, COLOR_OFFENSE_RATE);
+        addToContent(OffenseRateA);
+        OffenseRateB = makeOffense("OffenseRateB", raen.Enemy.StatusEffectCore.OffenseEffect.Kind.RELOAD, 4f, COLOR_OFFENSE_RATE);
+        addToContent(OffenseRateB);
+        OffenseRateC = makeOffense("OffenseRateC", raen.Enemy.StatusEffectCore.OffenseEffect.Kind.RELOAD, 6f, COLOR_OFFENSE_RATE);
+        addToContent(OffenseRateC);
 
         // ============ BulletSpawn（中级）============
         BulletSpawnArtillery = new BulletSpawn("BulletSpawnArtillery") {{
@@ -448,6 +486,26 @@ public class raenStatusEffects {
         effect.color = color;
         return effect;
     }
+    private static StatusEffect makeOffense(String name, raen.Enemy.StatusEffectCore.OffenseEffect.Kind kind,
+                                           float maxMultiplier, Color color) {
+        raen.Enemy.StatusEffectCore.OffenseEffect effect =
+                new raen.Enemy.StatusEffectCore.OffenseEffect(name, kind, maxMultiplier);
+        effect.damage = 0f;
+        effect.transitionDamage = 0f;
+        effect.color = color;
+        return effect;
+    }
+
+    private static StatusEffect makeMark(String name, float rangeTiles, int tagCount, boolean fixed, Color color) {
+        raen.Bullet.RaenMarkStatus effect = new raen.Bullet.RaenMarkStatus(name);
+        effect.range = rangeTiles * Vars.tilesize;
+        effect.tagCount = tagCount;
+        effect.fixed = fixed;
+        effect.damage = 0f;
+        effect.transitionDamage = 0f;
+        effect.color = color;
+        return effect;
+    }
     private static StatusEffect makeSalvage(String name, float rangeTiles, int activeSlots, int maxQueue, float durationSeconds, Color color) {
         SalvageEffect effect = new SalvageEffect(name);
         effect.rangeTiles = rangeTiles;
@@ -479,15 +537,15 @@ public class raenStatusEffects {
      * 低级：数值 +12.5% / 1 架僚机 / 减伤 25% / 共血（血量需 >75%）/ 盾转血 36→20 / 血转盾 10% / 反伤 10→45%（18 格）
      *       短时爆发 18秒连3秒×0.75（13 格，1 目标）/ 血量转移 75%（13 格，敌1己1）/ 分裂 低于30%→2×15% / 共享回复 受伤2%、治疗5%（10 格，3 人）/ 点燃 每5秒（3×碰撞体积）
      *       浴血 攻击 +0→200%、攻速 +0→150%、移速 +0→160%（开火后激活，每秒扣当前生命1%）
-     *       玻璃大炮 生命50%/伤200% | 轻装 生命60%/速200%/攻速125% | 重装 速60%/生命240%/伤150% | 刮痧 攻速200%/伤52% / 势大力沉 攻速60%/伤200% / 幽影 15格15秒 / 扭曲 10格15秒 / 回收 10格/1槽/存5/3秒
+     *       玻璃大炮 生命50%/伤200% | 轻装 生命60%/速200%/攻速125% | 重装 速60%/生命240%/伤150% | 刮痧 攻速200%/伤52% / 势大力沉 攻速60%/伤200% / 幽影 15格15秒 / 扭曲 10格15秒 / 回收 10格/1槽/存5/3秒 / 标印 6格1标签
      * 中级：数值 +25%   / 2 架僚机 / 炮击 / 减伤 50% / 共血（血量需 >50%）/ 盾转血 50→40 / 血转盾 20% / 反伤 20→60%（24 格）
      *       短时爆发 14秒连4秒×1.75（17 格，2 目标）/ 血量转移 100%（17 格，敌2己2）/ 分裂 低于40%→2×25% / 共享回复 受伤4%、治疗8%（15 格，5 人）
      *       浴血 攻击 +0→300%、攻速 +0→210%、移速 +0→230%（开火后激活，每秒扣当前生命1%）
-     *       玻璃大炮 生命30%/伤600% | 轻装 生命40%/速450%/攻速150% | 重装 速35%/生命360%/伤200% | 刮痧 攻速300%/伤36% / 势大力沉 攻速35%/伤375% / 幽影 23格12秒 / 扭曲 14格12秒 / 回收 15格/2槽/存7/4秒
+     *       玻璃大炮 生命30%/伤600% | 轻装 生命40%/速450%/攻速150% | 重装 速35%/生命360%/伤200% | 刮痧 攻速300%/伤36% / 势大力沉 攻速35%/伤375% / 幽影 23格12秒 / 扭曲 14格12秒 / 回收 15格/2槽/存7/4秒 / 标印 10格2标签
      * 高级：数值 +50%   / 3 架僚机 / 减伤 75% / 共血（血量需 >1）  / 盾转血 60→60 / 血转盾 30% / 反伤 30→75%（30 格）
      *       短时爆发 10秒连5秒×3（21 格，3 目标）/ 血量转移 125%（21 格，敌3己2）/ 分裂 低于50%→2×35% / 共享回复 受伤6%、治疗12%（20 格，7 人）/ 弹幕环绕 每10秒控2.5秒（2.5×抓、2×绕）
      *       浴血 攻击 +0→400%、攻速 +0→280%、移速 +0→320%（开火后激活，每秒扣当前生命1%）
-     *       玻璃大炮 生命10%/伤1000% | 轻装 生命20%/速750%/攻速175% | 重装 速15%/生命480%/伤250% | 刮痧 攻速400%/伤29% / 势大力沉 攻速10%/伤1500% / 幽影 30格9秒 / 扭曲 18格9秒 / 回收 20格/3槽/存9/5秒
+     *       玻璃大炮 生命10%/伤1000% | 轻装 生命20%/速750%/攻速175% | 重装 速15%/生命480%/伤250% | 刮痧 攻速400%/伤29% / 势大力沉 攻速10%/伤1500% / 幽影 30格9秒 / 扭曲 18格9秒 / 回收 20格/3槽/存9/5秒 / 标印 14格3标签
      */
     public static StatusEffect[][] getTierPools() {
         StatusEffect[][] pools = new StatusEffect[PVESettings.TIER_COUNT][];
@@ -497,21 +555,27 @@ public class raenStatusEffects {
                 ShieldToHealthA, HealthToShieldA, ReflectA,
                 LinkBurstA, LinkTransferA, SplitA, ShareA, Ignite,
                 BloodAtkA, BloodRateA, BloodMoveA,
-                GlassCannonA, NimbleA, HeavyArmorA, ScratcherA, MightyA, ShadowA, DistortA, SalvageA);
+                GlassCannonA, NimbleA, HeavyArmorA, ScratcherA, MightyA, ShadowA, DistortA, SalvageA,
+                MarkRandomA, MarkFixedA,
+                OffenseAtkA, OffenseRateA);
         pools[PVESettings.TIER_MID] = buildPool(
                 SpeedB, HealthB, DamageB, ReloadB,
                 GenerateWingmanB, BulletSpawnArtillery, DamageReductionB, TeamHealthB,
                 ShieldToHealthB, HealthToShieldB, ReflectB,
                 LinkBurstB, LinkTransferB, SplitB, ShareB,
                 BloodAtkB, BloodRateB, BloodMoveB,
-                GlassCannonB, NimbleB, HeavyArmorB, ScratcherB, MightyB, ShadowB, DistortB, SalvageB);
+                GlassCannonB, NimbleB, HeavyArmorB, ScratcherB, MightyB, ShadowB, DistortB, SalvageB,
+                MarkRandomB, MarkFixedB,
+                OffenseAtkB, OffenseRateB);
         pools[PVESettings.TIER_HIGH] = buildPool(
                 SpeedC, HealthC, DamageC, ReloadC,
                 GenerateWingmanC, DamageReductionC, TeamHealthC,
                 ShieldToHealthC, HealthToShieldC, ReflectC,
                 LinkBurstC, LinkTransferC, SplitC, ShareC, BulletOrbit,
                 BloodAtkC, BloodRateC, BloodMoveC,
-                GlassCannonC, NimbleC, HeavyArmorC, ScratcherC, MightyC, ShadowC, DistortC, SalvageC);
+                GlassCannonC, NimbleC, HeavyArmorC, ScratcherC, MightyC, ShadowC, DistortC, SalvageC,
+                MarkRandomC, MarkFixedC,
+                OffenseAtkC, OffenseRateC);
         return pools;
     }
 
@@ -558,6 +622,8 @@ public class raenStatusEffects {
                 {ShadowA, ShadowB, ShadowC},
                 {DistortA, DistortB, DistortC},
                 {SalvageA, SalvageB, SalvageC},
+                {MarkRandomA, MarkRandomB, MarkRandomC, MarkFixedA, MarkFixedB, MarkFixedC},
+                {OffenseAtkA, OffenseAtkB, OffenseAtkC, OffenseRateA, OffenseRateB, OffenseRateC},
         };
     }
 

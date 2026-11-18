@@ -8,6 +8,7 @@ import mindustry.Vars;
 import mindustry.entities.units.StatusEntry;
 import mindustry.gen.Unit;
 import mindustry.type.StatusEffect;
+import raen.Enemy.raenStatusEffects;
 
 /**
  * 分裂：血量低于阈值时，生成两个继承部分血量的同类单位，随后自身死亡。
@@ -65,6 +66,13 @@ public class SplitEffect extends StatusEffect {
         float distance = Math.max(unit.hitSize * 1.5f, 12f);
         int spawned = 0;
 
+        // 母体的僚机档位：子单位和母体长得一模一样，档位必须一致，
+        // 否则会出现「同一个单位同时带高级 + 低级僚机」的观感。
+        int wingmanTier = 0;
+        if (unit.getDuration(raenStatusEffects.GenerateWingmanC) > 0f) wingmanTier = 3;
+        else if (unit.getDuration(raenStatusEffects.GenerateWingmanB) > 0f) wingmanTier = 2;
+        else if (unit.getDuration(raenStatusEffects.GenerateWingmanA) > 0f) wingmanTier = 1;
+
         for (int i = 0; i < 2; i++) {
             Unit child = unit.type.create(unit.team);
             if (child == null) continue;
@@ -82,6 +90,8 @@ public class SplitEffect extends StatusEffect {
             child.add();
             // 打上「分裂产物」标记，之后抽效果时分裂整族都会被排除。
             BORN_FROM_SPLIT.put(child.id, true);
+            // 僚机档位跟母体一致（子单位之后再抽强化时会被覆盖回来）。
+            raen.Enemy.BuffManager.setInheritedWingman(child, wingmanTier);
             spawned++;
         }
 
