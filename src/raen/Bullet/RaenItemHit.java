@@ -124,11 +124,11 @@ public class RaenItemHit extends RaenEffectBase {
     public float phaseShieldCap = 1.5f;
 
     /** 合金：闪电条数 */
-    public int surgeMin = 1, surgeMax = 3;
-    /** 合金：闪电长度的硬上限（格）—— 无论怎么配都不会超过 6 */
-    public static final float SURGE_MAX_TILES = 6f;
+    public int surgeMin = 1, surgeMax = 4;
+    /** 合金：闪电长度的硬上限（格）—— 无论怎么配都不会超过 10 */
+    public static final float SURGE_MAX_TILES = 10f;
     /** 合金：闪电长度（格），会被 {@link #SURGE_MAX_TILES} 夹住 */
-    public float surgeLengthMin = 2f, surgeLengthMax = 6f;
+    public float surgeLengthMin = 2f, surgeLengthMax = 10f;
     /** 合金：闪电伤害比例 */
     public float surgeDamageMin = 0.05f, surgeDamageMax = 0.10f;
     /** 合金：闪电颜色 */
@@ -405,6 +405,10 @@ public class RaenItemHit extends RaenEffectBase {
     /**
      * 塑钢：3-5 个碎片，在命中点为圆心、半径 3-7 格的圆环上等距生成，
      * 每个碎片朝圆心飞、并刚好越过圆心（速度按半径反算，寿命 = 飞行时间）。
+     * <p>
+     * ★ 碎片<b>只带追击标签</b>（见 {@link RaenShards#spawnChase}），不继承原子弹的其它标签：
+     * 一次塑钢命中会产生 3-5 次额外命中，若碎片也带合金（闪电 / 电荷 / 连锁）、布（转命）
+     * 之类的「命中即叠层」标签，叠层与触发频率会翻好几倍（实测「塑钢 + 合金」刷闪电过于强势）。
      */
     private void plastaniumHit(float damage) {
         if (RaenShards.depthExceeded(ctxBullet)) return;
@@ -424,9 +428,9 @@ public class RaenItemHit extends RaenEffectBase {
             // 半程越过圆心：速度 = 2×半径 / 飞行时间
             float speed = dist * 2f / travel;
 
-            Bullet shard = RaenShards.spawn(ctxBullet, ctxTeam, px, py,
+            Bullet shard = RaenShards.spawnChase(ctxBullet, ctxTeam, px, py,
                     damage * Mathf.random(plastaniumDamageMin, plastaniumDamageMax),
-                    speed, angle + 180f, true);
+                    speed, angle + 180f);
 
             if (shard != null) {
                 shard.lifetime = travel;      // 飞过圆心就消失，不会继续外飞
@@ -450,13 +454,16 @@ public class RaenItemHit extends RaenEffectBase {
         Fx.hitLaser.at(ctxX, ctxY, 0f, phaseColor);
     }
 
-    /** 合金：1-3 条闪电 + 1 层连锁 */
+    /** 合金：1-4 条闪电 + 1 层连锁 */
     private void surgeHit(float damage) {
         int count = Mathf.random(surgeMin, surgeMax);
+        // 长度取整数格、两端都含（Mathf.random(int,int) 是闭区间）：2-10 就是 2~10 都能摇到
+        int minLen = Math.max(1, (int)surgeLengthMin);
+        int maxLen = Math.max(minLen, (int)Math.min(SURGE_MAX_TILES, surgeLengthMax));
         for (int i = 0; i < count; i++) {
-            float length = Math.min(SURGE_MAX_TILES, Mathf.random(surgeLengthMin, surgeLengthMax));
+            int length = Mathf.random(minLen, maxLen);
             float dmg = damage * Mathf.random(surgeDamageMin, surgeDamageMax);
-            Lightning.create(ctxTeam, surgeColor, dmg, ctxX, ctxY, Mathf.random(360f), (int) length);
+            Lightning.create(ctxTeam, surgeColor, dmg, ctxX, ctxY, Mathf.random(360f), length);
         }
         RaenEffectLS.INSTANCE.applyTo(ctxTarget, 1, ctxTeam, damage);
     }

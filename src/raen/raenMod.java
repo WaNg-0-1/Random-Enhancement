@@ -78,7 +78,7 @@ public class raenMod extends Mod {
 }
 /*
 
-git tag v160.3.95
-git push origin v160.3.95
+git tag v160.3.96
+git push origin v160.3.96
 
  */

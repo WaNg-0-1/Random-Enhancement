@@ -8,6 +8,7 @@ import mindustry.entities.bullet.BulletType;
 import mindustry.game.Team;
 import mindustry.gen.Bullet;
 import mindustry.type.Item;
+import raen.Bullet.effect.RaenEffectZJ;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -16,16 +17,23 @@ import java.util.Set;
  * 碎片子弹工具。
  * <p>
  * 铅 / 塑钢 / 玻璃 都要「生成一枚继承原子弹的子弹」，做法与测试模组的
- * {@code fz.Ty.FZfzly}（复制领域场）一致：<b>直接拿原子弹的类型来 create，再把标签整份复制过去</b>，
+ * {@code fz.Ty.FZfzly}（复制领域场）一致：<b>直接拿原子弹的类型来 create</b>，
  * 所以碎片的外观、尺寸、颜色、拖尾、飞行手感都跟原弹完全一样，不用另外造类型。
  * <pre>
  * Bullet shard = source.type.create(source, team, x, y, angle, damage, 1f);
  * shard.vel.set(Angles.trnsx(angle, speed), Angles.trnsy(angle, speed));
  * shard.time = 0f;
- * RaenBulletMarks.copyBulletMarks(source, shard);
  * </pre>
- * 玻璃碎片额外<b>摘掉会继续「额外生成」的标签</b>（玻璃 / 铅 / 塑钢 / 合金）——
- * 即「去除碎片、闪电等额外生成的属性」，其余加伤、燃烧、中毒等属性照常继承。
+ * 三类碎片的标签策略各不相同（<b>别为了「统一」把它们合并</b>，各有明确理由）：
+ * <ul>
+ *   <li><b>铅</b>（{@link #spawn(Bullet, Team, float, float, float, float, float, boolean)}）：
+ *       整份继承，它是「延后触发的一发同标签子弹」，继承才是设计意图；</li>
+ *   <li><b>塑钢</b>（{@link #spawnChase(Bullet, Team, float, float, float, float, float)}）：
+ *       <b>只带追击</b>。一次 3-5 颗碎片就是 3-5 次独立命中，若继承合金 / 布之类的标签会高频刷
+ *       闪电、电荷、连锁与转命，强度失控（v160.3.96 实测后收紧）；</li>
+ *   <li><b>玻璃</b>（{@link #snapshotWithoutGenerators(Bullet)}）：摘掉会继续「额外生成」的标签
+ *       （玻璃 / 铅 / 塑钢 / 合金），其余加伤、燃烧、中毒等照常继承。</li>
+ * </ul>
  * <p>
  * 两层防套娃：
  * <ol>
@@ -86,7 +94,7 @@ public class RaenShards {
     // ==================== 生成 ====================
 
     /**
-     * 生成一枚碎片，继承原子弹的类型与<b>全部</b>标签（铅 / 塑钢的「触发效果的子弹」）。
+     * 生成一枚碎片，继承原子弹的类型与<b>全部</b>标签（铅的「延迟触发子弹」）。
      */
     public static Bullet spawn(Bullet source, Team team, float x, float y,
                                float damage, float speed, float angle, boolean copyTags) {
@@ -97,6 +105,34 @@ public class RaenShards {
             RaenBulletMarks.copyBulletMarks(source, bullet);
             int depth = RaenBulletMarks.getBulletMark(source, SHARD);
             RaenBulletMarks.addBulletMark(bullet, SHARD, depth + 1);
+        }
+        RaenBulletMarks.addBulletMark(bullet, NO_TAG, 1);
+        return bullet;
+    }
+
+    /**
+     * 生成一枚<b>只带追击标签</b>的碎片（塑钢专用）。
+     * <p>
+     * 为什么不整份继承标签：塑钢一次产 3-5 个碎片，碎片伤害虽只有原弹的 3%-10%，
+     * 但<b>每颗碎片都是一次独立的命中结算</b>。只要原弹带合金（闪电 / 电荷 / 连锁）、布（转命）
+     * 这类「命中即叠层 / 即触发」的标签，一次塑钢命中就会凭空多出 3-5 次触发，
+     * 叠层速度远超设计预期（实测「塑钢 + 合金」会高频刷闪电、电荷与连锁，过于强势）。
+     * <p>
+     * 所以塑钢碎片只保留 <b>{@link RaenEffectZJ#ID 追击}</b>：命中时照常叠追击层，
+     * 其余标签（伤害加成、四属性、其它物品行为）一概不继承。
+     *
+     * @param source 源子弹（碎片外观与速度继承它；层数只抄追击与代数）
+     */
+    public static Bullet spawnChase(Bullet source, Team team, float x, float y,
+                                    float damage, float speed, float angle) {
+        Bullet bullet = spawn(source == null ? null : source.type, source, team, x, y, damage, speed, angle, false);
+        if (bullet == null) return null;
+
+        if (source != null) {
+            // 只抄「追击」的层数；碎片代数继续累加，防止任何生成类标签回流
+            int chase = RaenBulletMarks.getBulletMark(source, RaenEffectZJ.ID);
+            if (chase > 0) RaenBulletMarks.addBulletMark(bullet, RaenEffectZJ.ID, chase);
+            RaenBulletMarks.addBulletMark(bullet, SHARD, RaenBulletMarks.getBulletMark(source, SHARD) + 1);
         }
         RaenBulletMarks.addBulletMark(bullet, NO_TAG, 1);
         return bullet;
