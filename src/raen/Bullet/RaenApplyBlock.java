@@ -22,6 +22,14 @@ import mindustry.Vars;
 import mindustry.content.Fx;
 import mindustry.entities.TargetPriority;
 import mindustry.entities.bullet.BulletType;
+import mindustry.entities.bullet.ContinuousBulletType;
+import mindustry.entities.bullet.LaserBulletType;
+import mindustry.entities.bullet.LightningBulletType;
+import mindustry.entities.bullet.PointBulletType;
+import mindustry.entities.bullet.PointLaserBulletType;
+import mindustry.entities.bullet.RailBulletType;
+import mindustry.entities.bullet.SapBulletType;
+import mindustry.entities.bullet.ShrapnelBulletType;
 import mindustry.gen.Building;
 import mindustry.gen.Bullet;
 import mindustry.gen.Groups;
@@ -351,6 +359,60 @@ public class RaenApplyBlock extends Block {
         }
     }
 
+    /**
+     * 是否是「瞬间命中」类子弹 —— 子弹本体永远停在炮口，命中判定由特效 / 范围伤害完成。
+     * <p>
+     * 这类子弹的 {@code bullet.x/y} 就是<b>炮口</b>，不是真正被打中的位置，所以按标签种类分别处理：
+     * <ul>
+     *   <li><b>主标签照挂</b> —— 9 个效果全部按 {@code ctxTarget} 结算，
+     *       {@code effect/} 包里不出现任何 {@code ctxX/ctxY}，所以与炮口坐标无关；</li>
+     *   <li><b>物品标签 / 四属性 / 液体不挂</b> —— 它们都是「在命中处<b>生成</b>东西」
+     *       （铅的 0 速子弹、塑钢 / 玻璃碎片、合金闪电、液态生成），命中处 = 炮口 ⇒ 全堆在炮口；</li>
+     *   <li><b>持续型连主标签也不挂</b> —— 频率问题（12 次/秒），见 {@link #isContinuousType}。</li>
+     * </ul>
+     * 实际后果：这些炮塔只有在<b>开火位置</b>落进范围内才会被挂上标签（普通子弹是「飞过就挂」），
+     * 这正是它们与常规子弹唯一的区别。
+     * <p>
+     * 覆盖的炮塔（v160 实测的子弹类，见各条注释）：
+     * <ul>
+     *   <li>{@link LaserBulletType} —— 蓝瑟、<b>魔灵</b>的二段激光（外壳是 FlakBulletType 的 fragBullet）；</li>
+     *   <li>{@link ContinuousBulletType}（连续激光 / 连续火焰）—— 融毁、升华；</li>
+     *   <li>{@link PointLaserBulletType} —— 光辉（速度 0、5 tick 结算一次）；</li>
+     *   <li>{@link ShrapnelBulletType} —— 雷光；</li>
+     *   <li>{@link RailBulletType} —— 厄兆；</li>
+     *   <li>{@link PointBulletType}、{@link LightningBulletType}、{@link SapBulletType} —— 其它瞬时射线类；</li>
+     *   <li>兜底：<b>速度为 0 且不继承炮口速度</b>的子弹（任何模组加的「原地」子弹都归这一类）。</li>
+     * </ul>
+     * ⚠ 只影响「挂标签」：敌方子弹的削弹（{@code weakenEnemyBullet}）照旧 —— 它改的是 {@code damage}，
+     * 与命中点无关，对连续激光同样有效。
+     */
+    public static boolean isInstantHitType(BulletType type) {
+        if (type == null) return false;
+        if (type instanceof ContinuousBulletType) return true;
+        if (type instanceof LaserBulletType) return true;
+        if (type instanceof PointLaserBulletType) return true;
+        if (type instanceof ShrapnelBulletType) return true;
+        if (type instanceof RailBulletType) return true;
+        if (type instanceof PointBulletType) return true;
+        if (type instanceof LightningBulletType) return true;
+        if (type instanceof SapBulletType) return true;
+        // 兜底（故意写得严格，避免误伤「速度 0 但靠 keepVelocity 继承炮口速度」的自定义子弹）：
+        // 自身速度为 0 + 不继承炮口速度 ⇒ 这发子弹永远停在它出生的地方
+        return type.speed <= 0f && !type.keepVelocity;
+    }
+
+    /**
+     * 是否<b>持续型</b>瞬间命中子弹（每 {@code damageInterval} 结算一次伤害，默认 5 tick = 12 次/秒）。
+     * <p>
+     * 与单发型的区别只在<b>触发频率</b>：融毁 / 升华是 {@link ContinuousBulletType}，
+     * 光辉的 {@link PointLaserBulletType} 也是 5 tick 结算一次（{@code speed = 0}、{@code lifetime = 20}，
+     * 一发子弹本身就要结算 4 次）。所以它们连主标签都不能挂 ——
+     * 追击 / 积焰 / 酸蚀 / 破绽 全是「命中叠层」，会被放大 4~12 倍。
+     */
+    public static boolean isContinuousType(BulletType type) {
+        return type instanceof ContinuousBulletType || type instanceof PointLaserBulletType;
+    }
+
     public RaenApplyBlock(String name) {
         super(name);
 
@@ -463,6 +525,8 @@ public class RaenApplyBlock extends Block {
         builder.append("  · ").append(Core.bundle.format("raen.block.stats.weaken",
                         weakenStartEnergy, fmt(weakenPerSecond * 100f), fmt(weakenFloor * 100f)))
                 .append('\n');
+        // 瞬间命中类子弹不挂标签（命中点 = 炮口），规则见 isInstantHitType
+        builder.append("  · ").append(Core.bundle.get("raen.block.stats.instant")).append('\n');
 
         builder.append('\n').append(Core.bundle.get("raen.block.stats.attrHeader")).append('\n');
         builder.append("  · ").append(Core.bundle.format("raen.attr.explode",
@@ -655,10 +719,18 @@ public class RaenApplyBlock extends Block {
                 // 碎片子弹不允许再挂任何标签（否则玻璃 / 塑钢会互相套娃）
                 if (RaenBulletMarks.hasBulletMark(bullet, RaenShards.NO_TAG)) return;
 
+                // 持续型瞬间命中子弹（融毁 / 升华 / 光辉）：每 5 tick 结算一次 = 12 次/秒，
+                // 连主标签都不能挂（追击 / 积焰 / 酸蚀 / 破绽 会被放大 4~12 倍），见 isContinuousType
+                if (isContinuousType(bullet.type)) return;
+
                 // 已解锁的主标签全部挂 1 层（命中时各施加 1 层）
-                for (int i = 0; i < active.size; i++) {
-                    MainTag tag = active.get(i);
-                    if (tag.effect != null) tag.effect.attach(bullet, Math.max(1, tag.stacks));
+                attachMains(bullet);
+
+                // 单发型瞬间命中子弹（蓝瑟 / 雷光 / 厄兆 / 魔灵二段激光）：主标签 + 纯加伤/纯状态类物品标签，
+                // 四属性与液体跳过（它们都要在命中处「生成」，而命中处就是炮口）
+                if (isInstantHitType(bullet.type)) {
+                    attachItems(bullet, limit, true);
+                    return;
                 }
 
                 // 四属性独立于标签：直接把本方块物品的合计写到子弹上（爆炸 / 点燃命中时用）
@@ -668,9 +740,17 @@ public class RaenApplyBlock extends Block {
                     rollAttributeTags(bullet);
                 }
 
-                attachItems(bullet, limit);
+                attachItems(bullet, limit, false);
                 attachLiquid(bullet);
             });
+        }
+
+        /** 已解锁的主标签全部挂 1 层（{@code attach} 自带幂等，多帧重复调用不会叠层） */
+        private void attachMains(Bullet bullet) {
+            for (int i = 0; i < active.size; i++) {
+                MainTag tag = active.get(i);
+                if (tag.effect != null) tag.effect.attach(bullet, Math.max(1, tag.stacks));
+            }
         }
 
         /** 保证命中时会被 {@link RaenItemHit} 接管（属性可能在没有物品标签时也要生效） */
@@ -758,7 +838,15 @@ public class RaenApplyBlock extends Block {
          * 剩下的名额（1 或 2 个）再从其余已装载物品里随机挑（这样混装时每种物品都能轮到，
          * 不会被定义顺序靠前的铜、铅一直霸占名额）。
          */
-        private void attachItems(Bullet bullet, int limit) {
+        /**
+         * 挂物品标签。
+         *
+         * @param instant 这发子弹是「瞬间命中」类（本体停在炮口，命中处 = 炮口）⇒
+         *                只允许带 {@link RaenItemTag#instantSafe 纯加伤 / 纯状态} 的物品，
+         *                会生成东西（铅 / 塑钢 / 玻璃 / 合金）、会在命中处做范围效果
+         *                （石墨 / 硫 / 爆混 / 煤 / 氧化物）、会改弹道（硅）的一律跳过
+         */
+        private void attachItems(Bullet bullet, int limit, boolean instant) {
             if (limit <= 0) return;
 
             long mask = RaenItemTags.maskOf(bullet);
@@ -767,7 +855,7 @@ public class RaenApplyBlock extends Block {
 
             // ① 必带物品：优先挂上（要在已装载且余额够时才生效）
             Item guaranteed = guaranteedItem;
-            if (guaranteed != null && room > 0) {
+            if (guaranteed != null && room > 0 && (!instant || RaenItemTags.instantSafe(guaranteed))) {
                 int index = RaenItemTags.indexOf(guaranteed);
                 if (index >= 0                              // 有物品标签定义
                     && (mask & (1L << index)) == 0L        // 这发子弹还没有这种物品的标签
@@ -786,6 +874,7 @@ public class RaenApplyBlock extends Block {
                 int index = RaenItemTags.indexOf(item);
                 if (index < 0) continue;
                 if ((mask & (1L << index)) != 0L) continue;   // 这发子弹已经有这种物品的标签了
+                if (instant && !RaenItemTags.instantSafe(item)) continue;  // 瞬中弹只带纯加伤/纯状态类
                 candidates.add(item);
             }
             if (candidates.size == 0) return;

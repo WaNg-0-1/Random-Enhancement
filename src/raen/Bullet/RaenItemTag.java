@@ -55,6 +55,20 @@ public class RaenItemTag {
     /** 获得标签后是否延迟生成碎片子弹（玻璃） */
     public boolean glassShard;
 
+    /**
+     * 能否挂到「瞬间命中」类子弹上（激光 / 射线 / 霰射光束）。
+     * <p>
+     * 这类子弹的本体停在炮口、{@code bullet.x/y} 就是炮口，而且（原版）伤害在 {@code init()} 里
+     * 一次性结算完，所以只允许「纯加伤 / 纯状态」的物品：不生成任何东西、不读命中坐标、不改弹道。
+     * <ul>
+     *   <li>✅ 铜 / 钛 / 钍 / 铍 / 钨 / 碳化物（加伤）· 布（加伤 + 转命）· 孢子夹（减速 + 层）· 废料（层 + 静止）</li>
+     *   <li>❌ 铅 / 塑钢 / 玻璃 / 合金（生成碎片与闪电）· 石墨 / 硫 / 爆混 / 煤 / 氧化物（在命中处做范围效果）·
+     *       硅（追踪会掰弯弹道）· 沙子（在目标处生成墙）</li>
+     * </ul>
+     * 默认 false：新增物品默认保守，确认不生成东西再 `.instantSafe()`。
+     */
+    public boolean instantSafe;
+
     public RaenItemTag(Item item, String key, String tag, String color) {
         this.item = item;
         this.key = key;
@@ -102,6 +116,12 @@ public class RaenItemTag {
     /** 变为「获得标签后延迟生成碎片」 */
     public RaenItemTag glass() {
         this.glassShard = true;
+        return this;
+    }
+
+    /** 允许挂到瞬间命中类子弹上（不生成东西 / 不看命中坐标 / 不改弹道），见 {@link #instantSafe} */
+    public RaenItemTag instant() {
+        this.instantSafe = true;
         return this;
     }
 

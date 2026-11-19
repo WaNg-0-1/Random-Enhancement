@@ -50,15 +50,15 @@ public class RaenItemTags {
         // explosiveness / flammability / radioactivity / charge，与原版数据永远一致。
         // 显示名与行为文案走本地化：raen.item.<key>.name / .effect
         def(Items.copper, "copper", "raenItCopper", "D98A5A")
-                .damage(3f, 1f);
+                .damage(3f, 1f).instant();
 
         def(Items.lead, "lead", "raenItLead", "8E93A8");
 
         def(Items.titanium, "titanium", "raenItTitanium", "7A9BD6")
-                .damage(5f, 1.05f);
+                .damage(5f, 1.05f).instant();
 
         def(Items.thorium, "thorium", "raenItThorium", "F573B8")
-                .damage(7f, 1.10f);
+                .damage(7f, 1.10f).instant();
 
         def(Items.silicon, "silicon", "raenItSilicon", "6E7B8B")
                 .homing(24f);
@@ -70,11 +70,13 @@ public class RaenItemTags {
 
         def(Items.plastanium, "plastanium", "raenItPlastanium", "C7D4A8");
 
-        def(Items.phaseFabric, "phasefabric", "raenItPhase", "F0D8A8");
+        def(Items.phaseFabric, "phasefabric", "raenItPhase", "F0D8A8")
+                .instant();
 
         def(Items.surgeAlloy, "surgealloy", "raenItSurge", "F3E979");
 
-        def(Items.sporePod, "sporepod", "raenItSpore", "9A7BA8");
+        def(Items.sporePod, "sporepod", "raenItSpore", "9A7BA8")
+                .instant();
 
         def(Items.pyratite, "pyratite", "raenItPyratite", "FFAA5F");
 
@@ -84,18 +86,19 @@ public class RaenItemTags {
 
         def(Items.sand, "sand", "raenItSand", "F7CFA0");
 
-        def(Items.scrap, "scrap", "raenItScrap", "A8A8A8");
+        def(Items.scrap, "scrap", "raenItScrap", "A8A8A8")
+                .instant();
 
         def(Items.beryllium, "beryllium", "raenItBeryllium", "6FAE9A")
-                .damage(8f, 1.045f);
+                .damage(8f, 1.045f).instant();
 
         def(Items.tungsten, "tungsten", "raenItTungsten", "7C8794")
-                .damage(9f, 1.075f);
+                .damage(9f, 1.075f).instant();
 
         def(Items.oxide, "oxide", "raenItOxide", "F0E0A0");
 
         def(Items.carbide, "carbide", "raenItCarbide", "A8B0C0")
-                .damage(10f, 1.125f);
+                .damage(10f, 1.125f).instant();
     }
 
     /**
@@ -144,6 +147,18 @@ public class RaenItemTags {
     public static RaenItemTag def(Item item) {
         int index = indexOf(item);
         return index < 0 ? null : DEFS.get(index);
+    }
+
+    /**
+     * 这种物品的标签能否挂到「瞬间命中」类子弹上（激光 / 射线 / 霰射光束）。
+     * <p>
+     * 这类子弹本体停在炮口、{@code bullet.x/y} 就是炮口，所以只放行「纯加伤 / 纯状态」的物品 ——
+     * 只要会生成东西（碎片、闪电、墙）、会在命中处做范围效果、或会改弹道（追踪），一律 false。
+     * 判定字段是 {@link RaenItemTag#instantSafe}（由 {@code init()} 里的 {@code .instant()} 标记）。
+     */
+    public static boolean instantSafe(Item item) {
+        RaenItemTag def = def(item);
+        return def != null && def.instantSafe;
     }
 
     /** 按标签名取定义（自动忽略 {@code *层数} 后缀），null = 不是物品标签 */
