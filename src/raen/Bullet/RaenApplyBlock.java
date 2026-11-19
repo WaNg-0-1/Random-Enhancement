@@ -102,15 +102,21 @@ public class RaenApplyBlock extends Block {
     public int energyPerItem = 1;
 
     /**
-     * <b>每种</b>液体的容量上限（单位）。
+     * <b>每种</b>液体的容量上限（单位）—— 直接写引擎的 {@link Block#liquidCapacity}，
+     * 在构造器里赋值（默认 {@link #LIQUID_CAPACITY}）。
      * <p>
-     * ⚠ 引擎的 {@code Block.liquidCapacity} 语义是<b>每种液体各存这么多</b>，不是所有液体加起来：
+     * ⚠ <b>不要在本类里声明同名字段</b>：{@code Block} 自己就有 {@code public float liquidCapacity = 10f}，
+     * 子类再声明一个同名的会把父类字段<b>遮蔽</b>（hide，不是 override）——
+     * 引擎/UI 全是按 {@code Block} 类型读的，读到的永远是父类那份 10，
+     * 于是「液体容量 2500」只在模组自己的代码里成立，游戏里照样显示/限制为 10。
+     * <p>
+     * ⚠ 引擎的语义是<b>每种液体各存这么多</b>，不是所有液体加起来：
      * {@code LiquidModule} 内部是 {@code float[] liquids}，按 {@code liquid.id} 各自独立计数
      * （见 {@code BuildingComp.transferLiquid}：{@code next.block.liquidCapacity - next.liquids.get(liquid)}）。
      * <p>
      * 液体<b>不提供能量</b> —— 装载液体不会提升范围、主标签解锁与物品标签上限。
      */
-    public float liquidCapacity = 2500f;
+    public static final float LIQUID_CAPACITY = 2500f;
 
     /**
      * 每多少单位液体可以挂一次液体标签（5 = 每 5 单位液体挂一次）。
@@ -353,8 +359,9 @@ public class RaenApplyBlock extends Block {
         hasItems = true;
         itemCapacity = 15;
         // 液体：可以输入多种液体（不限制种类），但液体不提供能量
-        // （容量见 liquidCapacity 字段；引擎只会在有液体消耗器时改写它）
+        // ★ 必须写父类（Block）的 liquidCapacity —— 引擎按 Block 类型读，别在本类里声明同名字段（会遮蔽成 10）
         hasLiquids = true;
+        liquidCapacity = LIQUID_CAPACITY;
         // 点击方块弹出「剩余 + 物品列表」面板（buildConfiguration）
         configurable = true;
         update = true;
@@ -1192,7 +1199,7 @@ public class RaenApplyBlock extends Block {
             if (liquidKinds.size > 0) {
                 table.row();
                 table.add(Core.bundle.format("raen.block.panel.liquidInfo",
-                        liquidKinds.size, (int) liquidUnitsPerTag))
+                        liquidKinds.size))
                         .left().padTop(2f).growX().wrap();
             }
         }
