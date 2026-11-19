@@ -1,6 +1,8 @@
 package raen.Bullet;
 
 import arc.math.Angles;
+import arc.struct.ObjectSet;
+import mindustry.Vars;
 import mindustry.content.Fx;
 import mindustry.content.Items;
 import mindustry.entities.bullet.BasicBulletType;
@@ -94,15 +96,21 @@ public class RaenShards {
     // ==================== 生成 ====================
 
     /**
-     * 生成一枚碎片，继承原子弹的类型与<b>全部</b>标签（铅的「延迟触发子弹」）。
+     * 生成一枚碎片，继承原子弹的类型与<b>除「生成类」以外的全部</b>标签（铅的「延迟触发子弹」）。
+     * <p>
+     * ⚠ 不再用 {@code copyBulletMarks} 整份抄：碎片一旦继承 铅 / 塑钢 / 玻璃 / 合金，
+     * 就又能自己产碎片与闪电（虽然 {@link #maxDepth} 拦得住「碎片生碎片」，但闪电之类拦不住），
+     * 所以这里改成「快照 → 剥掉 {@link RaenItemTags#generates} 的标签 → 再写」。
      */
     public static Bullet spawn(Bullet source, Team team, float x, float y,
                                float damage, float speed, float angle, boolean copyTags) {
-        Bullet bullet = spawn(source == null ? null : source.type, source, team, x, y, damage, speed, angle, copyTags);
+        Bullet bullet = spawn(source == null ? null : source.type, source, team, x, y, damage, speed, angle, false);
         if (bullet == null) return null;
 
         if (copyTags && source != null) {
-            RaenBulletMarks.copyBulletMarks(source, bullet);
+            for (String mark : snapshotWithoutGenerators(source)) {
+                RaenBulletMarks.addBulletMark(bullet, mark);
+            }
             int depth = RaenBulletMarks.getBulletMark(source, SHARD);
             RaenBulletMarks.addBulletMark(bullet, SHARD, depth + 1);
         }
@@ -125,15 +133,25 @@ public class RaenShards {
      */
     public static Bullet spawnChase(Bullet source, Team team, float x, float y,
                                     float damage, float speed, float angle) {
-        Bullet bullet = spawn(source == null ? null : source.type, source, team, x, y, damage, speed, angle, false);
+        return spawnChase(source == null ? null : source.type, team, x, y, damage, speed, angle,
+                source == null ? 0 : RaenBulletMarks.getBulletMark(source, RaenEffectZJ.ID),
+                source == null ? 0 : RaenBulletMarks.getBulletMark(source, SHARD));
+    }
+
+    /**
+     * 同上，但来源用<b>事先抄好的值</b>（{@code sourceType} / 追击层数 / 代数）。
+     * <p>
+     * 塑钢碎片是随机延迟生成的，那时源子弹很可能已经被池子回收复用，
+     * 不能再从它身上读 {@code type} 或标签层数，所以延迟路径走这个重载。
+     */
+    public static Bullet spawnChase(BulletType sourceType, Team team, float x, float y,
+                                    float damage, float speed, float angle, int chaseStacks, int depth) {
+        Bullet bullet = spawn(sourceType, null, team, x, y, damage, speed, angle, false);
         if (bullet == null) return null;
 
-        if (source != null) {
-            // 只抄「追击」的层数；碎片代数继续累加，防止任何生成类标签回流
-            int chase = RaenBulletMarks.getBulletMark(source, RaenEffectZJ.ID);
-            if (chase > 0) RaenBulletMarks.addBulletMark(bullet, RaenEffectZJ.ID, chase);
-            RaenBulletMarks.addBulletMark(bullet, SHARD, RaenBulletMarks.getBulletMark(source, SHARD) + 1);
-        }
+        // 只抄「追击」的层数；碎片代数继续累加，防止任何生成类标签回流
+        if (chaseStacks > 0) RaenBulletMarks.addBulletMark(bullet, RaenEffectZJ.ID, chaseStacks);
+        RaenBulletMarks.addBulletMark(bullet, SHARD, depth + 1);
         RaenBulletMarks.addBulletMark(bullet, NO_TAG, 1);
         return bullet;
     }
@@ -165,11 +183,7 @@ public class RaenShards {
     /** 核心实现：按源类型 create + 写速度，不处理标签 */
     public static Bullet spawn(BulletType sourceType, Bullet source, Team team, float x, float y,
                                float damage, float speed, float angle, boolean copyTags) {
-        BulletType shardType = sourceType;
-        if (shardType == null) {
-            load();
-            shardType = type;
-        }
+        BulletType shardType = shardTypeOf(sourceType);
 
         // 与 FZfzly 相同：直接拿源类型 create，速度缩放传 1（下面再精确写 vel）
         Bullet bullet = shardType.create(source, team == null ? Team.derelict : team, x, y, angle, damage, 1f);
@@ -180,6 +194,59 @@ public class RaenShards {
         bullet.vel.set(Angles.trnsx(angle, speed), Angles.trnsy(angle, speed));
         bullet.time = 0f;
         return bullet;
+    }
+
+    /**
+     * 碎片用哪个类型 create。
+     * <p>
+     * ⚠ 关键：源类型如果自己会「生东西」（{@code fragBullet} / {@code intervalBullet} / {@code lightning}），
+     * <b>绝不能直接拿它 create</b> —— 碎片是「同类型的新子弹」，会把这些类型级行为一起带走：
+     * 实测「劫难 afflict」的主子弹 {@code bulletInterval = 3} + {@code intervalBullets = 2}（≈40 发/秒）
+     * 加 {@code fragBullets = 20}，一颗碎片就能分裂出一片子弹海，配合塑钢再次生碎片直接内存溢出。
+     * <p>
+     * 这种情况退回干净的兜底类型（{@link #type}）：外观变成普通小弹丸，但不会再分裂 / 打闪电。
+     * 普通子弹（没有这些字段）照旧沿用源类型，外观手感不变。
+     */
+    public static BulletType shardTypeOf(BulletType sourceType) {
+        load();
+        if (sourceType == null) return type;
+        return generates(sourceType) ? type : sourceType;
+    }
+
+    /**
+     * 这个子弹类型自己会不会「生东西」：分裂弹（{@code fragBullet}）、周期分裂弹（{@code intervalBullet}）、
+     * 自带闪电（{@code lightning > 0}）。碎片的类型选择与「分裂弹不给生成类标签」都用这一条判定。
+     */
+    public static boolean generates(BulletType type) {
+        return type != null
+                && (type.fragBullet != null || type.intervalBullet != null || type.lightning > 0);
+    }
+
+    /** 被别的子弹当作「分裂弹 / 周期分裂弹」的类型（内容表扫出来的一次性缓存） */
+    private static ObjectSet<BulletType> fragSpawned;
+
+    /**
+     * 这发子弹是不是「由别的子弹分裂出来的」（某个类型的 {@code fragBullet} / {@code intervalBullet}）。
+     * <p>
+     * 这类子弹数量极大（劫难 afflict ≈ 40 发/秒），再给它们挂「生成类」标签就会滚雪球；
+     * {@link RaenApplyBlock} 用这条判定跳过 铅 / 塑钢 / 玻璃 / 合金。
+     * <p>
+     * ⚠ 只能按<b>类型</b>判：引擎没有给子弹留「我是谁的碎片」这条信息。所以同一个类型如果
+     * 既被炮塔直射、又被别的子弹当分裂弹用，也会被一并当成分裂弹（保守方向：宁可少挂）。
+     */
+    public static boolean isFragSpawned(BulletType type) {
+        if (type == null) return false;
+        if (fragSpawned == null) {
+            fragSpawned = new ObjectSet<>();
+            if (Vars.content != null) {
+                for (BulletType t : Vars.content.bullets()) {
+                    if (t == null) continue;
+                    if (t.fragBullet != null) fragSpawned.add(t.fragBullet);
+                    if (t.intervalBullet != null) fragSpawned.add(t.intervalBullet);
+                }
+            }
+        }
+        return fragSpawned.contains(type);
     }
 
     // ==================== 标签快照 ====================

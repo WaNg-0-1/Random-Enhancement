@@ -849,13 +849,19 @@ public class RaenApplyBlock extends Block {
         private void attachItems(Bullet bullet, int limit, boolean instant) {
             if (limit <= 0) return;
 
+            // 分裂弹（fragBullet / intervalBullet 产出的子弹）数量极大：劫难一发主弹 ≈ 40 发/秒，
+            // 再给它挂「生成类」标签就会滚雪球（每发都产碎片 → 每片又是一次命中）。
+            boolean frag = RaenShards.isFragSpawned(bullet.type);
+
             long mask = RaenItemTags.maskOf(bullet);
             int room = limit - Long.bitCount(mask);
             if (room <= 0) return;
 
             // ① 必带物品：优先挂上（要在已装载且余额够时才生效）
             Item guaranteed = guaranteedItem;
-            if (guaranteed != null && room > 0 && (!instant || RaenItemTags.instantSafe(guaranteed))) {
+            if (guaranteed != null && room > 0
+                    && (!instant || RaenItemTags.instantSafe(guaranteed))
+                    && (!frag || !RaenItemTags.generates(guaranteed))) {
                 int index = RaenItemTags.indexOf(guaranteed);
                 if (index >= 0                              // 有物品标签定义
                     && (mask & (1L << index)) == 0L        // 这发子弹还没有这种物品的标签
@@ -875,6 +881,7 @@ public class RaenApplyBlock extends Block {
                 if (index < 0) continue;
                 if ((mask & (1L << index)) != 0L) continue;   // 这发子弹已经有这种物品的标签了
                 if (instant && !RaenItemTags.instantSafe(item)) continue;  // 瞬中弹只带纯加伤/纯状态类
+                if (frag && RaenItemTags.generates(item)) continue;        // 分裂弹不带生成类标签
                 candidates.add(item);
             }
             if (candidates.size == 0) return;

@@ -52,7 +52,7 @@ public class RaenItemTags {
         def(Items.copper, "copper", "raenItCopper", "D98A5A")
                 .damage(3f, 1f).instant();
 
-        def(Items.lead, "lead", "raenItLead", "8E93A8");
+        def(Items.lead, "lead", "raenItLead", "8E93A8").spawns();
 
         def(Items.titanium, "titanium", "raenItTitanium", "7A9BD6")
                 .damage(5f, 1.05f).instant();
@@ -64,16 +64,16 @@ public class RaenItemTags {
                 .homing(24f);
 
         def(Items.metaglass, "metaglass", "raenItGlass", "8FC3D6")
-                .glass();
+                .glass().spawns();
 
         def(Items.graphite, "graphite", "raenItGraphite", "9AA5B1");
 
-        def(Items.plastanium, "plastanium", "raenItPlastanium", "C7D4A8");
+        def(Items.plastanium, "plastanium", "raenItPlastanium", "C7D4A8").spawns();
 
         def(Items.phaseFabric, "phasefabric", "raenItPhase", "F0D8A8")
                 .instant();
 
-        def(Items.surgeAlloy, "surgealloy", "raenItSurge", "F3E979");
+        def(Items.surgeAlloy, "surgealloy", "raenItSurge", "F3E979").spawns();
 
         def(Items.sporePod, "sporepod", "raenItSpore", "9A7BA8")
                 .instant();
@@ -159,6 +159,17 @@ public class RaenItemTags {
     public static boolean instantSafe(Item item) {
         RaenItemTag def = def(item);
         return def != null && def.instantSafe;
+    }
+
+    /**
+     * 这种物品的标签是否会「生成新东西」（铅 / 塑钢 / 玻璃 / 合金）。
+     * <p>
+     * 分裂弹（{@code fragBullet} / {@code intervalBullet}）不挂这类标签，碎片也不继承这类标签，
+     * 否则会指数级滚雪球（见 {@link RaenItemTag#generates}）。
+     */
+    public static boolean generates(Item item) {
+        RaenItemTag def = def(item);
+        return def != null && def.generates;
     }
 
     /** 按标签名取定义（自动忽略 {@code *层数} 后缀），null = 不是物品标签 */

@@ -69,6 +69,15 @@ public class RaenItemTag {
      */
     public boolean instantSafe;
 
+    /**
+     * 这种物品会不会<b>生成新的子弹 / 闪电 / 建筑</b>（铅的 0 速子弹、塑钢与玻璃的碎片、合金的闪电）。
+     * <p>
+     * 用途：这些标签一律不许挂到「由子弹分裂出来的子弹」上（某个类型的 {@code fragBullet} /
+     * {@code intervalBullet}），否则一发子弹会滚成子弹风暴（实测「劫难」40 发/秒的分裂弹 +
+     * 塑钢碎片会把内存吃干）。同样的名单也用于剥掉碎片继承来的标签。
+     */
+    public boolean generates;
+
     public RaenItemTag(Item item, String key, String tag, String color) {
         this.item = item;
         this.key = key;
@@ -122,6 +131,12 @@ public class RaenItemTag {
     /** 允许挂到瞬间命中类子弹上（不生成东西 / 不看命中坐标 / 不改弹道），见 {@link #instantSafe} */
     public RaenItemTag instant() {
         this.instantSafe = true;
+        return this;
+    }
+
+    /** 标记为「生成类」标签（会产出新子弹 / 闪电 / 建筑），见 {@link #generates} */
+    public RaenItemTag spawns() {
+        this.generates = true;
         return this;
     }
 

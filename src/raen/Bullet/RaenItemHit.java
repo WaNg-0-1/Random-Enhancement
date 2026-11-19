@@ -7,12 +7,15 @@ import arc.math.Mathf;
 import arc.struct.ObjectIntMap;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
+import arc.util.Time;
 import mindustry.content.Fx;
 import mindustry.content.Items;
 import mindustry.content.StatusEffects;
 import mindustry.entities.Fires;
 import mindustry.entities.Lightning;
 import mindustry.entities.Units;
+import mindustry.entities.bullet.BulletType;
+import mindustry.game.Team;
 import mindustry.gen.Building;
 import mindustry.gen.Bullet;
 import mindustry.gen.Groups;
@@ -23,6 +26,7 @@ import mindustry.world.Tile;
 import mindustry.Vars;
 import raen.Bullet.effect.RaenEffectJY;
 import raen.Bullet.effect.RaenEffectLS;
+import raen.Bullet.effect.RaenEffectZJ;
 import raen.Bullet.effect.RaenEffectZM;
 
 /**
@@ -108,13 +112,21 @@ public class RaenItemHit extends RaenEffectBase {
     public float graphiteFlatDamage = 3f;
 
     /** 塑钢：碎片数量下限 / 上限 */
-    public int plastaniumMin = 3, plastaniumMax = 5;
+    public int plastaniumMin = 1, plastaniumMax = 4;
     /** 塑钢：碎片伤害占子弹伤害的比例 */
-    public float plastaniumDamageMin = 0.03f, plastaniumDamageMax = 0.10f;
+    public float plastaniumDamageMin = 0.025f, plastaniumDamageMax = 0.075f;
     /** 塑钢：碎片生成圆环的半径范围（格，以命中点为圆心） */
     public float plastaniumRingMin = 3f, plastaniumRingMax = 7f;
     /** 塑钢：碎片从圆环上飞到「越过圆心」所需的时间（tick） */
     public float plastaniumTravelTicks = 40f;
+    /**
+     * 塑钢：每颗碎片的<b>随机生成延迟</b>上限（tick，0 = 不延迟）。
+     * <p>
+     * 一次命中产多颗碎片时，如果全部同帧生成，命中同一个目标就会同一帧结算好几次；
+     * 加了 0~{@code 30} tick 的随机延迟后，碎片会错峰飞出、错峰命中，既降低瞬时峰值，
+     * 视觉上也不会「一下子扎堆炸开」。
+     */
+    public float plastaniumDelayTicks = 30f;
 
     /** 布：有盾目标的额外伤害比例 */
     public float phaseShieldBonus = 0.25f;
@@ -403,12 +415,15 @@ public class RaenItemHit extends RaenEffectBase {
     }
 
     /**
-     * 塑钢：3-5 个碎片，在命中点为圆心、半径 3-7 格的圆环上等距生成，
+     * 塑钢：1-4 个碎片，在命中点为圆心、半径 3-7 格的圆环上等距生成，
      * 每个碎片朝圆心飞、并刚好越过圆心（速度按半径反算，寿命 = 飞行时间）。
      * <p>
      * ★ 碎片<b>只带追击标签</b>（见 {@link RaenShards#spawnChase}），不继承原子弹的其它标签：
-     * 一次塑钢命中会产生 3-5 次额外命中，若碎片也带合金（闪电 / 电荷 / 连锁）、布（转命）
-     * 之类的「命中即叠层」标签，叠层与触发频率会翻好几倍（实测「塑钢 + 合金」刷闪电过于强势）。
+     * 一次塑钢命中会产生多次额外命中，若碎片也带合金（闪电 / 电荷 / 连锁）、布（转命）
+     * 之类的「命中即叠层」标签，叠层与触发频率会翻好几倍。
+     * <p>
+     * ★ 每颗碎片带 0~{@link #plastaniumDelayTicks} 的随机延迟（{@code Time.run}），错峰生成。
+     * 延迟期间源子弹可能已被池子回收，所以类型 / 追击层数 / 代数都先抄成局部变量。
      */
     private void plastaniumHit(float damage) {
         if (RaenShards.depthExceeded(ctxBullet)) return;
@@ -417,26 +432,43 @@ public class RaenItemHit extends RaenEffectBase {
         float startAngle = Mathf.random(360f);
         float travel = Math.max(6f, plastaniumTravelTicks);
 
+        // ★ 延迟生成时源子弹可能已回收 ⇒ 现在就把要用的东西抄下来
+        final BulletType srcType = ctxBullet == null ? null : ctxBullet.type;
+        final int chaseStacks = ctxBullet == null ? 0 : RaenBulletMarks.getBulletMark(ctxBullet, RaenEffectZJ.ID);
+        final int depth = ctxBullet == null ? 0 : RaenBulletMarks.getBulletMark(ctxBullet, RaenShards.SHARD);
+        final Team team = ctxTeam;
+        final float cx = ctxX, cy = ctxY;
+
         for (int i = 0; i < count; i++) {
             float angle = startAngle + i * 360f / count;
             float radiusTiles = Mathf.random(plastaniumRingMin, plastaniumRingMax);
             float dist = radiusTiles * 8f;
 
-            float px = ctxX + Angles.trnsx(angle, dist);
-            float py = ctxY + Angles.trnsy(angle, dist);
+            float px = cx + Angles.trnsx(angle, dist);
+            float py = cy + Angles.trnsy(angle, dist);
 
             // 半程越过圆心：速度 = 2×半径 / 飞行时间
             float speed = dist * 2f / travel;
+            float dmg = damage * Mathf.random(plastaniumDamageMin, plastaniumDamageMax);
+            float outAngle = angle + 180f;
 
-            Bullet shard = RaenShards.spawnChase(ctxBullet, ctxTeam, px, py,
-                    damage * Mathf.random(plastaniumDamageMin, plastaniumDamageMax),
-                    speed, angle + 180f);
-
-            if (shard != null) {
-                shard.lifetime = travel;      // 飞过圆心就消失，不会继续外飞
-                shard.time = 0f;
+            float delay = plastaniumDelayTicks > 0f ? Mathf.random(plastaniumDelayTicks) : 0f;
+            if (delay <= 0.01f) {
+                spawnPlastaniumShard(srcType, team, px, py, dmg, speed, outAngle, travel, chaseStacks, depth);
+            } else {
+                Time.run(delay, () -> spawnPlastaniumShard(
+                        srcType, team, px, py, dmg, speed, outAngle, travel, chaseStacks, depth));
             }
         }
+    }
+
+    /** 生成一颗塑钢碎片（飞过圆心即消失，不会继续外飞） */
+    private void spawnPlastaniumShard(BulletType type, Team team, float x, float y, float damage,
+                                      float speed, float angle, float lifetime, int chaseStacks, int depth) {
+        Bullet shard = RaenShards.spawnChase(type, team, x, y, damage, speed, angle, chaseStacks, depth);
+        if (shard == null) return;
+        shard.lifetime = lifetime;
+        shard.time = 0f;
     }
 
     /** 布：对盾目标加伤、附带护盾值伤害、施加转命 */
