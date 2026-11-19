@@ -40,8 +40,9 @@ public class RaenBlocks {
             );
         }};
 
-        // 双星球接入：建造成本按当前星球切换 + 同一方块挂进两颗星球的科技树（不同研究成本）。
-        // 必须在 applyField 建好之后调用；细节与三条注意事项见 RaenPlanetHooks 的类注释。
+        // 多星球接入：默认解锁 + 不挂科技树 + 建造成本按当前星球切换（S 铜铅 / E 石墨硅铍 / 其它石墨硅）。
+        // 必须在 applyField 建好之后调用（它会写 alwaysUnlocked / shownPlanets / requirements）。
+        // 为什么不能留空 shownPlanets，见 RaenPlanetHooks 的类注释。
         RaenPlanetHooks.install();
 
         // Block 的构造器会通过 MappableContent 自动登记进 Vars.content.blocks()，不用手动 add
