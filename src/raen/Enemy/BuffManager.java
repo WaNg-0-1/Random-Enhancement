@@ -234,8 +234,8 @@ public class BuffManager {
         }
         return null;
     }
-    /** 标印系列的出现概率（其余效果为 1，即正常概率）。 */
-    private static final float MARK_CHANCE = 0.15f;
+    /** 低出现率效果（标印 / 残影）的通过概率：其余效果为 1，即正常概率。 */
+    private static final float LOW_CHANCE = 0.15f;
     /** 复用：本轮筛选后的候选。 */
     private static final Seq<StatusEffect> candidates = new Seq<>();
 
@@ -244,16 +244,21 @@ public class BuffManager {
         StatusEffect[] pool = tierPools[tier];
         if (pool == null || pool.length == 0) return null;
 
-        // 先筛出可选项；标印系列额外过一道概率，降低出现率
+        // 先筛出可选项；标印 / 残影这一类额外过一道概率，降低出现率
         candidates.clear();
         for (StatusEffect effect : pool) {
             if (!isPickable(effect, chosen)) continue;
-            if (effect instanceof raen.Bullet.RaenMarkStatus && Math.random() >= MARK_CHANCE) continue;
+            if (isLowChance(effect) && Math.random() >= LOW_CHANCE) continue;
             candidates.add(effect);
         }
         if (candidates.size == 0) return null;
 
         return candidates.get((int) (Math.random() * candidates.size));
+    }
+    /** 低出现率效果：标印（「施加领域」那一套标签系统）与残影，比常规效果更难抽到。 */
+    private static boolean isLowChance(StatusEffect effect) {
+        return effect instanceof raen.Bullet.RaenMarkStatus
+            || effect instanceof raen.Enemy.StatusEffectCore.AfterimageEffect;
     }
     /** 未被选中、且不与已选效果同属一个互斥组。 */
     private static boolean isPickable(StatusEffect effect, Seq<StatusEffect> chosen) {
@@ -292,6 +297,8 @@ public class BuffManager {
         if (unit == null || Vars.state == null || Vars.state.rules == null) return false;
         if (!unit.isValid()) return false;
         if (raen.Enemy.StatusEffectCore.Wingman.isDrone(unit)) return false;
+        // 残影是「血量的影子」，不能再被随机强化（否则每个残影都会带一整套 buff）。
+        if (raen.Enemy.StatusEffectCore.AfterimageEffect.isClone(unit)) return false;
         if (PVESettings.isAllTeams()) return true;
         Team waveTeam = Vars.state.rules.waveTeam;
         if (waveTeam == null) return false;

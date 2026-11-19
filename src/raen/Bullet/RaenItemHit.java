@@ -88,8 +88,8 @@ public class RaenItemHit extends RaenEffectBase {
     public float explodeFlatPerPoint = 1f;
     /** 爆炸：每 1 点爆炸性换算成子弹伤害的百分比（0.01 = 1%，即 B=2.2 → 2.2% 子弹伤害） */
     public float explodePercentPerPoint = 0.01f;
-    /** 点燃：每 1 点燃烧性提供的半径（格） */
-    public float igniteRadiusPerPoint = 4f;
+    /** 点燃：每 1 点燃烧性提供的半径（格）—— 半径 = C × 该值（默认 2C） */
+    public float igniteRadiusPerPoint = 2f;
     /** 点燃：燃烧持续时间（秒） */
     public float igniteSeconds = 5f;
     /** 放电性 → 给经过的子弹挂「电荷」标签的概率倍率（方块挂标签时用） */
@@ -324,7 +324,7 @@ public class RaenItemHit extends RaenEffectBase {
         Fx.blastExplosion.at(ctxX, ctxY);
     }
 
-    /** 点燃：命中处点火，半径 4C 内敌方单位燃烧 5 秒 */
+    /** 点燃：命中处点火，半径 2C 内敌方单位燃烧 5 秒 */
     private void ignite() {
         float c = attr[1];
         float radius = c * igniteRadiusPerPoint * 8f;

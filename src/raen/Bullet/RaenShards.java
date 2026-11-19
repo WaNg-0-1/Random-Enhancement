@@ -1,6 +1,7 @@
 package raen.Bullet;
 
 import arc.math.Angles;
+import arc.struct.ObjectMap;
 import arc.struct.ObjectSet;
 import mindustry.Vars;
 import mindustry.content.Fx;
@@ -204,13 +205,131 @@ public class RaenShards {
      * 实测「劫难 afflict」的主子弹 {@code bulletInterval = 3} + {@code intervalBullets = 2}（≈40 发/秒）
      * 加 {@code fragBullets = 20}，一颗碎片就能分裂出一片子弹海，配合塑钢再次生碎片直接内存溢出。
      * <p>
-     * 这种情况退回干净的兜底类型（{@link #type}）：外观变成普通小弹丸，但不会再分裂 / 打闪电。
-     * 普通子弹（没有这些字段）照旧沿用源类型，外观手感不变。
+     * 为什么不能照搬「临时把 {@code fragBullet} / {@code lightning} / {@code hitEffect} 置空、
+     * 在 try/finally 里操作完再还原」那套写法（见 {@code fz.pt.ljt}）：那套成立的前提是
+     * <b>引擎只在这一次同步调用里读这些字段</b>（激光结算一帧、然后 {@code b.remove()}）。
+     * 碎片却要在<b>整个生命周期（几十帧）里每一帧读 {@code b.type}</b>，
+     * 而类型对象是全局共享的 —— 字段一旦置空就得一直空着，真正的炮塔子弹也会跟着停止分裂。
+     * <p>
+     * 所以这里改成给「会生东西」的源类型配一个<b>同外观、干净物理</b>的替身类型
+     * （{@link GhostShardType}：draw 转发给源类型，自己的 {@code fragBullet} / {@code intervalBullet} /
+     * {@code lightning} 全是空 / 0）。碎片看起来还是原来的子弹，但永远不会再分裂。
+     * 普通子弹（没有这些字段）照旧直接用源类型，零开销。
      */
     public static BulletType shardTypeOf(BulletType sourceType) {
         load();
         if (sourceType == null) return type;
-        return generates(sourceType) ? type : sourceType;
+        if (!generates(sourceType)) return sourceType;
+
+        if (ghosts == null) ghosts = new ObjectMap<>();
+        BulletType ghost = ghosts.get(sourceType);
+        if (ghost == null) {
+            ghost = new GhostShardType(sourceType);
+            ghost.load();
+            ghosts.put(sourceType, ghost);
+        }
+        return ghost;
+    }
+
+    /** 源类型 → 替身类型（每个「会生东西」的类型只建一次） */
+    private static ObjectMap<BulletType, BulletType> ghosts;
+
+    /**
+     * 「会生东西」的源类型的碎片替身：<b>外观完全一样，但不会分裂 / 打闪电</b>。
+     * <p>
+     * 只做两件事：
+     * <ol>
+     *   <li>把 {@code draw} / {@code drawLight} 转发给源类型 —— 贴图、尺寸、配色、发光全部原样，
+     *       连自定义 draw 的模组子弹也能正确显示（转发失败时自动退回自己的小弹丸绘制）；</li>
+     *   <li>物理字段照 {@link #type} 的干净配置来（{@code fragBullet = null}、{@code intervalBullet = null}、
+     *       {@code lightning = 0}），拖尾这类纯视觉的从源类型抄过来。</li>
+     * </ol>
+     */
+    public static class GhostShardType extends BasicBulletType {
+        /** 用来画图的源类型 */
+        public final BulletType visual;
+        /** 转发绘制失败过一次就彻底退回自己的绘制，避免每帧刷异常 */
+        private boolean visualBroken;
+
+        public GhostShardType(BulletType visual) {
+            super(1f, 0f, "shell");
+            this.visual = visual;
+
+            speed = 1f;
+            lifetime = 90f;
+            width = 5f;
+            height = 6f;
+            hitSize = 3f;
+
+            collides = true;
+            collidesTiles = false;
+            collidesAir = true;
+            collidesGround = true;
+            hittable = true;
+            absorbable = true;
+            pierce = false;
+            pierceBuilding = false;
+            keepVelocity = false;
+            drag = 0f;
+            knockback = 0f;
+
+            // 拖尾是纯视觉，跟着源类型走
+            trailEffect = visual.trailEffect;
+            trailLength = visual.trailLength;
+            trailWidth = visual.trailWidth;
+            trailColor = visual.trailColor;
+            trailChance = visual.trailChance;
+            trailInterval = visual.trailInterval;
+            trailSpread = visual.trailSpread;
+            trailRotation = visual.trailRotation;
+            trailInterp = visual.trailInterp;
+
+            // 外观参数一起抄：正常走「转发绘制」，但万一转发失败退回自绘时也要像原弹，
+            // 而且部分类型的 draw 会读 b.type.width/height（那时读到的就是这里抄来的值）。
+            // ⚠ 只抄视觉（宽高/配色/贴图），不抄 hitSize —— 碰撞体保持 3px，
+            //   否则大弹丸的碎片会凭空变得更容易命中，等于改平衡。
+            if (visual instanceof BasicBulletType src) {
+                width = src.width;
+                height = src.height;
+                if (src.sprite != null) sprite = src.sprite;   // null 会让 load() 找不到贴图，保留自己的
+                frontColor = src.frontColor;
+                backColor = src.backColor;
+                mixColorFrom = src.mixColorFrom;
+                mixColorTo = src.mixColorTo;
+            }
+
+            hitEffect = Fx.hitBulletSmall;
+            despawnEffect = Fx.none;
+            shootEffect = Fx.none;
+            smokeEffect = Fx.none;
+        }
+
+        @Override
+        public void draw(Bullet b) {
+            if (!visualBroken && visual != null) {
+                try {
+                    visual.draw(b);
+                    return;
+                } catch (Throwable ignored) {
+                    // 自定义 draw 期待源类型的私有数据（极少见）⇒ 永久退回兜底绘制
+                    visualBroken = true;
+                }
+            }
+            super.draw(b);
+        }
+
+        @Override
+        public void drawLight(Bullet b) {
+            if (!visualBroken && visual != null) {
+                try {
+                    visual.drawLight(b);
+                    return;
+                } catch (Throwable ignored) {
+                    visualBroken = true;
+                }
+            }
+            super.drawLight(b);
+        }
     }
 
     /**

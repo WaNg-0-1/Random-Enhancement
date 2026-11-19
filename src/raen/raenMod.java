@@ -60,6 +60,8 @@ public class raenMod extends Mod {
         TeamHealthEffect.registerTick();
         SharedRecoveryEffect.registerTick();
         SalvageEffect.registerEvents();
+        // 残影：寿命推进 / 消散回血 / 存档前清场（残影身上没有本效果，只能走全局钩子）
+        raen.Enemy.StatusEffectCore.AfterimageEffect.registerHooks();
         EnemyBuildingBoost.init();
 
         // 世界加载：清掉按单位 id 记录的运行时状态（id 会重用，不清会串到新单位上）

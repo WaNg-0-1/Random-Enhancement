@@ -41,7 +41,7 @@ public class RaenEffectPZ extends RaenEffectBase {
     /** 触发破绽后叠层的概率 */
     public float applyChance = 0.30f;
     /** 每层伤害系数（子弹伤害 × 层数 × 该系数） */
-    public float damageRatio = 0.01f;
+    public float damageRatio = 0.0075f;
     /** 直接施加（无子弹）时的等效子弹伤害（构造时同步给父类的 fallbackDamage） */
     public float directHitDamage = 5f;
     /** 层数文字缩放（和另外几个效果保持一致，避免挡视线） */
