@@ -1061,7 +1061,10 @@ public class RaenApplyBlock extends Block {
         private boolean takeLiquidCharge(Liquid liquid) {
             int left = liquidCharges.get(liquid, 0);
             if (left > 0) {
-                liquidCharges.put(liquid, left - 1);
+                // 次数用完就把键删掉，别留一个 0 值的键在池子里
+                // （ObjectIntMap.put 不会清理 0 值，留着会让「种类数」和实际可挂次数对不上）
+                if (left - 1 <= 0) liquidCharges.remove(liquid);
+                else liquidCharges.put(liquid, left - 1);
                 return true;
             }
 
@@ -1655,11 +1658,12 @@ public class RaenApplyBlock extends Block {
         // ==================== 存档 ====================
 
         /**
-         * 存档版本：1 = 增加「选中的液体」；2 = 改为「必带物品」列表；3 = 必带物品改单选；4 = 液体次数池
+         * 存档版本：1 = 增加「选中的液体」；2 = 改为「必带物品」列表；3 = 必带物品改单选；
+         * 4 = 液体次数池（<b>有 bug，别用</b>）；5 = 液体次数池改成「结束符」写法
          */
         @Override
         public byte version() {
-            return 4;
+            return 5;
         }
 
         @Override
@@ -1667,8 +1671,15 @@ public class RaenApplyBlock extends Block {
             super.write(write);
             // 必带物品：1 个物品 id（-1 = 没选）
             write.s(guaranteedItem == null ? -1 : guaranteedItem.id);
-            // 液体次数池：种类数 + 每种的（液体 id + 剩余次数）
-            write.s(liquidCharges.size);
+            // 液体次数池：逐条写（液体 id + 剩余次数），用 -1 结束符收尾。
+            //
+            // ⚠ 这里【不能】先写「种类数」再写条目：
+            //   次数池里可能有「次数已耗尽（=0）」的种类，写的时候要跳过它们，
+            //   于是「声明的种类数」会大于「真正写出的条目数」。
+            //   读档那边按声明数去读，就会读到本区块之外去，把整个地图区的字节流读歪，
+            //   地图区后半段全成垃圾 → 存档损坏 → 存档被删 → 重开地图变成全新空图。
+            //   （原版 readChunk 不限制读取长度，多读的字节会直接吃掉下一个区块的数据。）
+            //   用结束符就没有这个问题：写到哪儿读到哪儿，永远对齐。
             for (Liquid liquid : liquidCharges.keys()){
                 if (liquid == null) continue;
                 int shots = liquidCharges.get(liquid, 0);
@@ -1676,6 +1687,7 @@ public class RaenApplyBlock extends Block {
                 write.s(liquid.id);
                 write.s(shots);
             }
+            write.s(-1); // 结束符
         }
 
         @Override
@@ -1698,12 +1710,28 @@ public class RaenApplyBlock extends Block {
                 short id = read.s();
                 guaranteedItem = id < 0 ? null : itemById(id);
             }
-            if (revision >= 4) {
-                // 液体次数池：种类数 + 每种的（液体 id + 剩余次数）
+            if (revision >= 4 && revision < 5) {
+                // 旧格式（revision 4）：种类数 + 每个（液体 id + 剩余次数）
+                // ⚠ 这个格式本身有 bug：写的时候会跳过「次数已耗尽」的种类，
+                //    于是声明的种类数可能大于实际写出的条目数 → 读越界 → 地图区被读歪。
+                //    这种旧存档一旦越界，后面的字节流已经错位，救不回来了；
+                //    这里只做尽力而为的读取，别再往下读更多。
                 liquidCharges.clear();
                 int kinds = read.s();
+                if (kinds < 0 || kinds > 256) kinds = 0;
                 for (int i = 0; i < kinds; i++){
                     short liquidId = read.s();
+                    int shots = read.s();
+                    Liquid liquid = liquidById(liquidId);
+                    if (liquid != null && shots > 0) liquidCharges.put(liquid, shots);
+                }
+            }
+            if (revision >= 5) {
+                // 新格式：逐条读到结束符 -1 为止（写多少读多少，永远不会越界）
+                liquidCharges.clear();
+                for (int i = 0; i < 256; i++){
+                    short liquidId = read.s();
+                    if (liquidId < 0) break; // 结束符
                     int shots = read.s();
                     Liquid liquid = liquidById(liquidId);
                     if (liquid != null && shots > 0) liquidCharges.put(liquid, shots);
