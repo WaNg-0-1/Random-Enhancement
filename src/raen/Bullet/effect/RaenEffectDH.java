@@ -65,11 +65,11 @@ public class RaenEffectDH extends RaenEffectBase {
     /** 大引爆范围伤害倍率 */
     public float bigAoeMultiplier = 0.2f;
     /** 小引爆范围伤害倍率 */
-    public float smallAoeMultiplier = 0.01f;
+    public float smallAoeMultiplier = 0.0125f;
     /** 小引爆范围 */
-    public float smallAoeRange = 40f;
+    public float smallAoeRange = 24f;
     /** 大引爆范围 */
-    public float bigAoeRange = 64f;
+    public float bigAoeRange = 52.8f;
     /** 磁爆圈异极湮灭时，引爆范围内目标身上每层电荷的伤害 */
     public float annihilationStackDamage = 1.5f;
     /** 磁爆圈异极湮灭的百分比伤害上限 */
@@ -664,10 +664,10 @@ public class RaenEffectDH extends RaenEffectBase {
                 Core.bundle.get("raen.tag.dh.l1") + "\n" +
                 Core.bundle.get("raen.tag.dh.l2") + "\n" +
                 "  · " + Core.bundle.format("raen.tag.dh.l3", chargeThreshold,
-                (int) (smallAoeMultiplier * 100), (int) (smallAoeRange / 8)) + "\n" +
+                num(smallAoeMultiplier * 100f), num(smallAoeRange / 8f)) + "\n" +
                 "  · " + Core.bundle.format("raen.tag.dh.l4", chargeThreshold) + "\n" +
                 "    " + Core.bundle.format("raen.tag.dh.l5", (int) (detonationMultiplier * 100),
-                (int) (bigAoeMultiplier * 100), (int) (bigAoeRange / 8)) + "\n" +
+                (int) (bigAoeMultiplier * 100), num(bigAoeRange / 8f)) + "\n" +
                 "    " + Core.bundle.format("raen.tag.dh.l6", num(fieldLifetime / 60f)) + "\n" +
                 Core.bundle.get("raen.tag.dh.l7") + "\n" +
                 Core.bundle.format("raen.tag.dh.l8", num(annihilationStackDamage)) + "\n" +

@@ -31,8 +31,12 @@ public class RaenEffectZJ extends RaenEffectBase {
 
     /** 结算间隔（tick，60 = 1 秒） */
     public float interval = 60f;
-    /** 范围伤害半径（世界单位，8 = 1 格；默认 5 格） */
-    public float splashRadius = 5f * 8f;
+    /** 伤害半径下限（格）：实际半径 = 该值 + 层数 × {@link #splashRadiusPerStack}，上限 {@link #splashRadiusMax} */
+    public float splashRadiusMin = 2.6f;
+    /** 每多 1 层追加的半径（格）：1/8 格 = 每 8 层 +1 格 */
+    public float splashRadiusPerStack = 1f / 8f;
+    /** 伤害半径上限（格）：层数再高也不会超过它 */
+    public float splashRadiusMax = 4.8f;
     /** 追击子弹每帧飞行像素 */
     public float bulletSpeed = 25f;
     /** 层数阈值：低于它每次只消耗 1 层、伤害 1；达到后把超过阈值的层数一次性消耗 */
@@ -134,13 +138,15 @@ public class RaenEffectZJ extends RaenEffectBase {
             if (team == null) {
                 trueDamage(target, finalDamage);
             } else {
-                spawnHomingBullet(target, team, finalDamage);
+                // 伤害半径随层数增长：2.6 + 层数/8 格（上限 4.8 格）
+                float radius = Math.min(splashRadiusMax, splashRadiusMin + stacks * splashRadiusPerStack) * 8f;
+                spawnHomingBullet(target, team, finalDamage, radius);
             }
         }
     }
 
-    /** 生成一枚从 (0,0) 精准飞向目标的追击子弹 */
-    private void spawnHomingBullet(Healthc target, Team team, float damage) {
+    /** 生成一枚从 (0,0) 精准飞向目标的追击子弹（{@code radius} = 命中时的伤害半径，世界单位） */
+    private void spawnHomingBullet(Healthc target, Team team, float damage, float radius) {
         if (target == null || team == null || target.dead()) return;
 
         float spd = Math.max(1f, bulletSpeed);
@@ -157,6 +163,8 @@ public class RaenEffectZJ extends RaenEffectBase {
             b.lifetime = dist / spd + 20f;
             b.data = target;
             b.fdata = damage;
+            // ★ 借用 damage 字段存「伤害半径」：这发子弹 collides = false，引擎从不读它的 damage
+            b.damage = radius;
         }
     }
 
@@ -206,7 +214,9 @@ public class RaenEffectZJ extends RaenEffectBase {
                     if (Mathf.dst(b.x, b.y, x, y) <= Math.max(self.bulletSpeed, 6f)) {
                         Fx.hitLancer.at(x, y);
                         Fx.shockwave.at(x, y);
-                        areaDamage(b.team, x, y, self.splashRadius, b.fdata, null, true);
+                        // 半径是发射时按层数算好的，存在 b.damage 里（见 spawnHomingBullet）
+                        float radius = b.damage > 0f ? b.damage : self.splashRadiusMax * 8f;
+                        areaDamage(b.team, x, y, radius, b.fdata, null, true);
                         b.remove();
                     }
                 }
@@ -239,7 +249,7 @@ public class RaenEffectZJ extends RaenEffectBase {
     public String describe() {
         return Core.bundle.format("raen.tag.zj.title", text.color) + "\n" +
                 Core.bundle.format("raen.tag.zj.l1", num(interval / 60f)) + "\n" +
-                Core.bundle.format("raen.tag.zj.l2", num(splashRadius / 8f)) + "\n" +
+                Core.bundle.format("raen.tag.zj.l2", num(splashRadiusMin), num(splashRadiusMax)) + "\n" +
                 "  · " + Core.bundle.format("raen.tag.zj.l3", threshold) + "\n" +
                 "  · " + Core.bundle.format("raen.tag.zj.l4", threshold) + "\n" +
                 "    " + Core.bundle.format("raen.tag.zj.l5", num(extraDamagePerStack)) + "\n" +

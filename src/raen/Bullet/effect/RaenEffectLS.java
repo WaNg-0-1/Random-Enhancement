@@ -34,7 +34,7 @@ public class RaenEffectLS extends RaenEffectBase {
     /** 伤害基数（%），伤害 = 子弹伤害 × (基数 + 层数)% */
     public float baseDamagePercent = 10f;
     /** 跳跃搜索半径基数（世界单位） */
-    public float baseChainRange = 240f;
+    public float baseChainRange = 128f;
     /** 每次跳跃的伤害衰减 */
     public float decayFactor = 0.8f;
     /** 主题色 */

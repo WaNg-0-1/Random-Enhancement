@@ -56,10 +56,16 @@ public class RaenEffectJY extends RaenEffectBase {
     public float dotHpScale = 0.20f;
     /** 有护盾时额外附带「护盾值 × 该系数」的伤害 */
     public float shieldDamageRatio = 0.005f;
-    /** 层数分摊范围（30 格） */
-    public float spreadRange = 240f;
-    /** 死亡引爆范围（24 格） */
-    public float deathAoeRange = 192f;
+    /** 层数分摊范围下限（16 格）：实际范围 = 该值 + 层数 × {@link #spreadRangePerStack}，上限 {@link #spreadRangeMax} */
+    public float spreadRangeBase = 128f;
+    /** 每多 1 层追加的分摊范围（格）：10% 格 = 每 10 层 +1 格 */
+    public float spreadRangePerStack = 0.1f * 8f;
+    /** 层数分摊范围上限（24 格） */
+    public float spreadRangeMax = 192f;
+    /** 死亡时「伤害」范围（8 格） */
+    public float deathAoeRange = 64f;
+    /** 死亡时「连锁引爆」的搜索范围（16 格）：只引爆这个范围内的同阵营积焰目标 */
+    public float deathChainRange = 128f;
     /** 死亡引爆：层数 × 该值 */
     public float deathFlatPerStack = 0.05f;
     /** 死亡引爆：层数 × 该值 × 目标最大生命 × deathHpRatio */
@@ -68,8 +74,8 @@ public class RaenEffectJY extends RaenEffectBase {
     public float deathHpRatio = 0.10f;
     /** 额外效果（引燃 / 点燃地面 / 范围伤害）的层数门槛 */
     public float igniteThreshold = 20f;
-    /** 额外效果范围（5 格） */
-    public float igniteAoeRange = 40f;
+    /** 额外效果范围（3.6 格） */
+    public float igniteAoeRange = 3.6f * 8f;
     /** 额外效果：层数 × 该值 */
     public float igniteAoeMultiplier = 0.08f;
     /** 同一目标两次额外效果的最小间隔（tick，15 秒） */
@@ -166,7 +172,7 @@ public class RaenEffectJY extends RaenEffectBase {
             // ④ 层数 ≥2 时把一半分给范围内一个没有积焰的目标（单位或建筑，建筑之间 / 建筑与单位之间都能互相分摊）
             if (stacks >= 2) {
                 int give = stacks / 2;
-                Healthc target = findSpreadTarget(unit, spreadRange);
+                Healthc target = findSpreadTarget(unit, spreadRange(stacks));
                 if (target != null) {
                     addLayer(target, give);
                     stacks -= give;
@@ -175,6 +181,15 @@ public class RaenEffectJY extends RaenEffectBase {
 
             setLayer(unit, stacks);
         }
+    }
+
+    /**
+     * 当前层数下的分摊范围（世界单位）：16 格 + 层数 × 0.1 格，上限 24 格。
+     * <p>
+     * 用<b>分摊前</b>的层数算 —— 层数越高、能传染得越远，但封顶 24 格。
+     */
+    private float spreadRange(int stacks) {
+        return Math.min(spreadRangeMax, spreadRangeBase + stacks * spreadRangePerStack);
     }
 
     /**
@@ -256,9 +271,9 @@ public class RaenEffectJY extends RaenEffectBase {
         applyStatus(target, StatusEffects.melting, stacks);
         applyStatus(target, StatusEffects.burning, stacks);
 
-        // ② 收集范围内其它积焰目标（快照）
+        // ② 收集范围内其它积焰目标（快照）：用「引爆范围」，比伤害范围大
         Seq<Healthc> nearby = new Seq<>();
-        float r2 = deathAoeRange * deathAoeRange;
+        float r2 = deathChainRange * deathChainRange;
 
         for (Unit other : Groups.unit) {
             if (other == target || other.health() <= 0f) continue;
@@ -330,7 +345,8 @@ public class RaenEffectJY extends RaenEffectBase {
                 "  · " + Core.bundle.format("raen.tag.jy.l4", (int) (dotHpScale * 100)) + "\n" +
                 "    " + Core.bundle.format("raen.tag.jy.l5", num(shieldDamageRatio * 100)) + "\n" +
                 "  · " + Core.bundle.get("raen.tag.jy.l6") + "\n" +
-                "  · " + Core.bundle.format("raen.tag.jy.l7", (int) (spreadRange / 8)) + "\n" +
+                "  · " + Core.bundle.format("raen.tag.jy.l7", (int) (spreadRangeBase / 8),
+                (int) (spreadRangeMax / 8)) + "\n" +
                 "    " + Core.bundle.get("raen.tag.jy.l8") + "\n" +
                 "  · " + Core.bundle.format("raen.tag.jy.l9", (int) igniteThreshold) + "\n" +
                 "    " + Core.bundle.format("raen.tag.jy.l10", (int) (igniteAoeRange / 8),
@@ -338,7 +354,7 @@ public class RaenEffectJY extends RaenEffectBase {
                 Core.bundle.get("raen.tag.jy.l11") + "\n" +
                 "  · " + Core.bundle.format("raen.tag.jy.l12", (int) (deathAoeRange / 8),
                 (int) (deathFlatPerStack * 100), num(deathHpPerStack), (int) (deathHpRatio * 100)) + "\n" +
-                "  · " + Core.bundle.get("raen.tag.jy.l13") + "\n" +
+                "  · " + Core.bundle.format("raen.tag.jy.l13", (int) (deathChainRange / 8)) + "\n" +
                 "    " + Core.bundle.get("raen.tag.jy.l14");
     }
 }

@@ -63,13 +63,13 @@ public class RaenEffectZR extends RaenEffectBase {
     /** 超出阈值层数后，每层直接折算成多少点伤害加到 A 中（不进上限） */
     public float overflowDamagePerStack = 0.75f;
     /** 爆炸最小半径（格；已损失血量比例 = 0 时） */
-    public float minRadius = 8f;
+    public float minRadius = 2f;
     /** 爆炸最大半径（格；已损失血量比例 = 100% 时） */
-    public float maxRadius = 24f;
+    public float maxRadius = 8f;
     /** 死亡引爆的固定半径（格） */
-    public float deathRadius = 16f;
+    public float deathRadius = 5f;
     /** 未满阈值就死亡时的引爆半径（格） */
-    public float deathPartialRadius = 12f;
+    public float deathPartialRadius = 3.6f;
     /** 未满阈值就死亡时：层数 × 该值 */
     public float deathPartialMultiplier = 0.10f;
     /** 伤害倍率下限（A 的 5%） */

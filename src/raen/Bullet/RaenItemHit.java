@@ -37,8 +37,8 @@ import raen.Bullet.effect.RaenEffectZM;
  * <p>
  * <b>四属性</b>（爆炸 B / 燃烧 C / 放射 F / 放电 D）<b>独立于主标签与物品标签</b>，分两种结算方式：
  * <ul>
- *   <li><b>爆炸 B</b>（命中时）：B 概率在命中处造成半径 6B 格、伤害 = B + B×子弹伤害 的范围伤害；</li>
- *   <li><b>点燃 C</b>（命中时）：C 概率点燃命中处地面，并对半径 4C 内的敌方单位施加 5 秒燃烧；</li>
+ *   <li><b>爆炸 B</b>（命中时）：B 概率在命中处造成半径 3.6B 格、伤害 = B + B×子弹伤害 的范围伤害；</li>
+ *   <li><b>点燃 C</b>（命中时）：C 概率点燃命中处地面，并对半径 2C 内的敌方单位施加 5 秒燃烧；</li>
  *   <li><b>放射性 F</b>（挂标签时）：方块按 F 的概率给经过的子弹挂「中毒」标签，命中照常叠中毒层；</li>
  *   <li><b>放电性 D</b>（挂标签时）：方块按 1.25×D 的概率给经过的子弹挂「电荷」标签，
  *       电荷按这发子弹的<b>全伤害</b>结算。</li>
@@ -83,7 +83,7 @@ public class RaenItemHit extends RaenEffectBase {
 
     // ==================== 四属性调参 ====================
     /** 爆炸：每 1 点爆炸性提供的半径（格） */
-    public float explodeRadiusPerPoint = 6f;
+    public float explodeRadiusPerPoint = 3.6f;
     /** 爆炸：每 1 点爆炸性提供的固定伤害 */
     public float explodeFlatPerPoint = 1f;
     /** 爆炸：每 1 点爆炸性换算成子弹伤害的百分比（0.01 = 1%，即 B=2.2 → 2.2% 子弹伤害） */
@@ -149,12 +149,12 @@ public class RaenItemHit extends RaenEffectBase {
     public Color phaseColor = Color.valueOf("F0D8A8");
 
     /** 爆混：范围伤害半径（格）与比例 */
-    public float blastRadiusTiles = 5f;
+    public float blastRadiusTiles = 3.6f;
     public float blastDamageRatio = 0.01f;
     /** 爆混：爆炸状态持续时间（秒） */
     public float blastSeconds = 3f;
     /** 氧化物：腐蚀半径（格）与时间（秒） */
-    public float oxideRadiusTiles = 5f;
+    public float oxideRadiusTiles = 3.6f;
     public float oxideSeconds = 4f;
     /** 硫：燃烧时间（秒） */
     public float burnSeconds = 5f;
@@ -173,7 +173,7 @@ public class RaenItemHit extends RaenEffectBase {
     /** 沙子：叠层上限 */
     public int sandMaxStacks = 100;
     /** 沙子：每层提供的「生成临时墙」概率（每层 1%） */
-    public float sandChancePerStack = 0.01f;
+    public float sandChancePerStack = 0.0125f;
     /** 沙子：临时墙生命 = 基础 + 层数 × 每层 */
     public float wallBaseHealth = 50f;
     public float wallHealthPerStack = 1f;
@@ -310,7 +310,7 @@ public class RaenItemHit extends RaenEffectBase {
     // ==================== 四属性 ====================
 
     /**
-     * 爆炸：命中处半径 6B 格的范围伤害。
+     * 爆炸：命中处半径 3.6B 格的范围伤害。
      * <p>
      * 伤害 = B（固定）+ 子弹伤害 × (B%)，B 按「100% = 1」记，
      * 但换算成伤害时取百分之 B（B=2.2 → 2.2% 子弹伤害），两个系数分别由
