@@ -251,6 +251,10 @@ public class RaenApplyBlock extends Block {
      * ★ 这个功能<b>只针对物品</b>：液体一律随机挂载，不提供指定。
      */
     public int guaranteeUnlockTags = 2;
+    /** 必带物品图标：相对方块边长的尺寸（3 格方块 0.7 → 约 17px） */
+    public float guaranteeIconScale = 0.7f;
+    /** 必带「已选但当前不生效」（断电 / 名额不足）时的图标透明度 */
+    public float guaranteeIconInactiveAlpha = 0.35f;
 
     /**
      * 随机主标签池里排除掉的标签：中毒（{@code raensdPoison}）、转命（{@code raenZm}）、
@@ -1471,6 +1475,7 @@ public class RaenApplyBlock extends Block {
             // 统一由 drawAllRanges()（Trigger.draw）按圆形画，见 drawRange()。
             if (drawShape) drawTriangles();
             drawPowerWarning();
+            drawGuaranteedIcon();
             Draw.reset();
         }
 
@@ -1537,6 +1542,30 @@ public class RaenApplyBlock extends Block {
             // 一点红光，暗处也能看见
             Drawf.light(x, y, size * 0.9f, powerWarningColor, alpha * 0.5f);
 
+            Draw.color();
+            Draw.z(prevZ);
+        }
+
+        /**
+         * 必带物品：在方块正中心<b>常显</b>那件物品的图标。
+         * <p>
+         * 只画「选中的那一个」（{@link #guaranteedItem}）；没被选中的物品仍然走原来的能层装饰 / 光点组，不额外画。
+         * <p>
+         * ⚠ 断电（或物品种类多但标签名额不够）时「必带」本来就不生效 —— 图标<b>不隐藏</b>，
+         * 改成 {@link #guaranteeIconInactiveAlpha} 的半透明，表示「已选但当前不起作用」。
+         */
+        private void drawGuaranteedIcon() {
+            Item item = guaranteedItem;
+            if (item == null) return;
+
+            float size = Math.max(4f, block.size * 8f * guaranteeIconScale);
+            // 「真正生效」= 名额够 + 方块里确实装了这件物品；否则半透明（已选但不起作用）
+            float alpha = (guaranteeUnlocked() && stocked.contains(item)) ? 1f : guaranteeIconInactiveAlpha;
+            float prevZ = Draw.z();
+
+            Draw.z(Layer.blockOver);
+            Draw.color(Color.white, alpha);
+            Draw.rect(item.uiIcon, x, y, size, size);
             Draw.color();
             Draw.z(prevZ);
         }

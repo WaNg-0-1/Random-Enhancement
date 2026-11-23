@@ -68,6 +68,9 @@ public class raenMod extends Mod {
         Events.on(EventType.WorldLoadEvent.class, e -> {
             raen.Enemy.StatusEffectCore.OffenseEffect.clearAll();
             raen.Enemy.StatusEffectCore.BloodbathEffect.clearAll();
+            raen.Enemy.StatusEffectCore.WalkerEffect.clearAll();
+            raen.Enemy.StatusEffectCore.DevourEffect.clearAll();
+            raen.Enemy.StatusEffectCore.KineticCounterEffect.clearAll();
         });
 
         // 核心数据库：换成带「标签」分类的版本（等客户端 UI 就绪后再换）
@@ -80,7 +83,7 @@ public class raenMod extends Mod {
 }
 /*
 
-git tag v160.4.03
-git push origin v160.4.03
+git tag v160.4.10
+git push origin v160.4.10
 
  */

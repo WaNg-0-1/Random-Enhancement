@@ -58,6 +58,17 @@ public class raenStatusEffects {
     public static StatusEffect OffenseAtkA, OffenseAtkB, OffenseAtkC;     // 攻击 200%/400%/600%，移速血量 25%
     public static StatusEffect OffenseRateA, OffenseRateB, OffenseRateC;  // 攻速 200%/400%/600%，移速血量 25%
 
+    // ---- 行者系：持续移动 30 秒蓄满，停步归零（9 个互相排斥）----
+    public static StatusEffect WalkerSprintA, WalkerSprintB, WalkerSprintC;     // 疾步：移速 +0→200/400/600%，攻击/攻速 100%→50%
+    public static StatusEffect WalkerKineticA, WalkerKineticB, WalkerKineticC; // 动能攻击：攻击/移速 +0→100/200/300%，血量 45%、攻速 66%
+    public static StatusEffect WalkerPursuerA, WalkerPursuerB, WalkerPursuerC; // 追击者：攻速/移速 +0→100/200/300%，血量 45%、攻击 66%
+
+    // ---- 吞噬：每 20/15/10 秒进入 1 秒吞噬窗口，吃弹回血回盾（冷却越长越低级）----
+    public static StatusEffect DevourA, DevourB, DevourC;  // 低级 20 秒/25%，中级 15 秒/50%，高级 10 秒/75%
+
+    // ---- 动能反击：每 1 秒快照血+盾，衰减时原地发射动能导弹（40 格射程 / 60 格追踪）----
+    public static StatusEffect KineticCounterA, KineticCounterB, KineticCounterC; // 1~3 / 1~5 / 1~7 枚，倍率 1.5→3 / 4.5 / 6
+
     // ---- 残影：每 2 秒快照血量，有衰减就按差值生成一个分身，自然消散时回血 ----
     public static StatusEffect AfterimageA, AfterimageB, AfterimageC;     // 1/2/3 个分身，回血 50%/75%/100%
 
@@ -124,6 +135,21 @@ public class raenStatusEffects {
     private static final Color COLOR_AFTERIMAGE_A = Color.valueOf("cdd6e6"); // 残影 低级（幽灵灰）
     private static final Color COLOR_AFTERIMAGE_B = Color.valueOf("a2adc2"); // 残影 中级
     private static final Color COLOR_AFTERIMAGE_C = Color.valueOf("78849c"); // 残影 高级
+    private static final Color COLOR_WALK_SPRINT_A = Color.valueOf("8de8d0");  // 疾步 低级
+    private static final Color COLOR_WALK_SPRINT_B = Color.valueOf("4dd6b8");  // 疾步 中级
+    private static final Color COLOR_WALK_SPRINT_C = Color.valueOf("00b894");  // 疾步 高级
+    private static final Color COLOR_WALK_KINETIC_A = Color.valueOf("ffb08a"); // 动能攻击 低级
+    private static final Color COLOR_WALK_KINETIC_B = Color.valueOf("ff8a5c"); // 动能攻击 中级
+    private static final Color COLOR_WALK_KINETIC_C = Color.valueOf("ff5a2b"); // 动能攻击 高级
+    private static final Color COLOR_WALK_PURSUER_A = Color.valueOf("c9a6ff"); // 追击者 低级
+    private static final Color COLOR_WALK_PURSUER_B = Color.valueOf("a06bff"); // 追击者 中级
+    private static final Color COLOR_WALK_PURSUER_C = Color.valueOf("7a33ff"); // 追击者 高级
+    private static final Color COLOR_DEVOUR_A = Color.valueOf("b8ff9c"); // 吞噬 低级
+    private static final Color COLOR_DEVOUR_B = Color.valueOf("7ee65c"); // 吞噬 中级
+    private static final Color COLOR_DEVOUR_C = Color.valueOf("4db32b"); // 吞噬 高级
+    private static final Color COLOR_KC_A = Color.valueOf("ffe0a3"); // 动能反击 低级
+    private static final Color COLOR_KC_B = Color.valueOf("ffb454"); // 动能反击 中级
+    private static final Color COLOR_KC_C = Color.valueOf("ff7a18"); // 动能反击 高级
 
     public static void load() {
         // 残影的两个「存档载体」状态（不进效果池，只用来在存档里记住残影的归属与剩余寿命）
@@ -305,6 +331,42 @@ public class raenStatusEffects {
         addToContent(OffenseRateB);
         OffenseRateC = makeOffense("OffenseRateC", raen.Enemy.StatusEffectCore.OffenseEffect.Kind.RELOAD, 6f, COLOR_OFFENSE_RATE);
         addToContent(OffenseRateC);
+        // ============ 行者系：持续移动 30 秒蓄满，停步归零；9 个互相排斥 ============
+        // 疾步：移速 +0→200/400/600%，攻击/攻速倍率 100%→50%
+        WalkerSprintA = makeWalker("WalkerSprintA", WalkerEffect.Kind.SPRINT, 2f, 0.50f, 0.50f, 1f, COLOR_WALK_SPRINT_A);
+        addToContent(WalkerSprintA);
+        WalkerSprintB = makeWalker("WalkerSprintB", WalkerEffect.Kind.SPRINT, 4f, 0.50f, 0.50f, 1f, COLOR_WALK_SPRINT_B);
+        addToContent(WalkerSprintB);
+        WalkerSprintC = makeWalker("WalkerSprintC", WalkerEffect.Kind.SPRINT, 6f, 0.50f, 0.50f, 1f, COLOR_WALK_SPRINT_C);
+        addToContent(WalkerSprintC);
+        // 动能攻击：攻击/移速 +0→100/200/300%，血量倍率 100%→45%，攻速倍率 100%→66%
+        WalkerKineticA = makeWalker("WalkerKineticA", WalkerEffect.Kind.KINETIC, 1f, 1f, 0.66f, 0.45f, COLOR_WALK_KINETIC_A);
+        addToContent(WalkerKineticA);
+        WalkerKineticB = makeWalker("WalkerKineticB", WalkerEffect.Kind.KINETIC, 2f, 1f, 0.66f, 0.45f, COLOR_WALK_KINETIC_B);
+        addToContent(WalkerKineticB);
+        WalkerKineticC = makeWalker("WalkerKineticC", WalkerEffect.Kind.KINETIC, 3f, 1f, 0.66f, 0.45f, COLOR_WALK_KINETIC_C);
+        addToContent(WalkerKineticC);
+        // 追击者：攻速/移速 +0→100/200/300%，血量倍率 100%→45%，攻击倍率 100%→66%
+        WalkerPursuerA = makeWalker("WalkerPursuerA", WalkerEffect.Kind.PURSUER, 1f, 0.66f, 1f, 0.45f, COLOR_WALK_PURSUER_A);
+        addToContent(WalkerPursuerA);
+        WalkerPursuerB = makeWalker("WalkerPursuerB", WalkerEffect.Kind.PURSUER, 2f, 0.66f, 1f, 0.45f, COLOR_WALK_PURSUER_B);
+        addToContent(WalkerPursuerB);
+        WalkerPursuerC = makeWalker("WalkerPursuerC", WalkerEffect.Kind.PURSUER, 3f, 0.66f, 1f, 0.45f, COLOR_WALK_PURSUER_C);
+        addToContent(WalkerPursuerC);
+        // ============ 吞噬：20/15/10 秒周期（冷却越长越低级），1 秒窗口，1.5 秒缴械+静止 ============
+        DevourA = makeDevour("DevourA", 20f, 0.25f, COLOR_DEVOUR_A);
+        addToContent(DevourA);
+        DevourB = makeDevour("DevourB", 15f, 0.50f, COLOR_DEVOUR_B);
+        addToContent(DevourB);
+        DevourC = makeDevour("DevourC", 10f, 0.75f, COLOR_DEVOUR_C);
+        addToContent(DevourC);
+        // ============ 动能反击：每 1 秒快照，衰减即发射 1~3/5/7 枚动能导弹 ============
+        KineticCounterA = makeKineticCounter("KineticCounterA", 3, 3f, COLOR_KC_A);
+        addToContent(KineticCounterA);
+        KineticCounterB = makeKineticCounter("KineticCounterB", 5, 4.5f, COLOR_KC_B);
+        addToContent(KineticCounterB);
+        KineticCounterC = makeKineticCounter("KineticCounterC", 7, 6f, COLOR_KC_C);
+        addToContent(KineticCounterC);
         // ============ 残影：每 2 秒快照，衰减差值为分身血量，存续 4 秒，1/2/3 个，消散回血 50%/75%/100% ============
         AfterimageA = makeAfterimage("AfterimageA", 1, 0.50f, COLOR_AFTERIMAGE_A);
         addToContent(AfterimageA);
@@ -511,6 +573,33 @@ public class raenStatusEffects {
         return effect;
     }
 
+    private static StatusEffect makeWalker(String name, WalkerEffect.Kind kind, float maxBonus,
+                                           float minDamageMultiplier, float minReloadMultiplier,
+                                           float minHealthMultiplier, Color color) {
+        WalkerEffect effect = new WalkerEffect(name, kind, maxBonus,
+                minDamageMultiplier, minReloadMultiplier, minHealthMultiplier);
+        effect.damage = 0f;
+        effect.transitionDamage = 0f;
+        effect.color = color;
+        return effect;
+    }
+
+    private static StatusEffect makeDevour(String name, float cycleSeconds, float healRatio, Color color) {
+        DevourEffect effect = new DevourEffect(name, cycleSeconds, healRatio);
+        effect.damage = 0f;
+        effect.transitionDamage = 0f;
+        effect.color = color;
+        return effect;
+    }
+
+    private static StatusEffect makeKineticCounter(String name, int maxMissiles, float maxMultiplier, Color color) {
+        KineticCounterEffect effect = new KineticCounterEffect(name, maxMissiles, maxMultiplier);
+        effect.damage = 0f;
+        effect.transitionDamage = 0f;
+        effect.color = color;
+        return effect;
+    }
+
     private static StatusEffect makeAfterimage(String name, int maxClones, float refundRatio, Color color) {
         AfterimageEffect effect = new AfterimageEffect(name, maxClones, refundRatio);
         effect.damage = 0f;
@@ -562,16 +651,25 @@ public class raenStatusEffects {
      *       浴血 攻击 +0→200%、攻速 +0→150%、移速 +0→160%（开火后激活，每秒扣当前生命1%）
      *       玻璃大炮 生命50%/伤200% | 轻装 生命60%/速200%/攻速125% | 重装 速60%/生命240%/伤150% | 刮痧 攻速200%/伤52% / 势大力沉 攻速60%/伤200% / 幽影 15格15秒 / 扭曲 10格15秒 / 回收 10格/1槽/存5/3秒 / 标印 6格1标签
      *       残影 每2秒快照、1 个、存续4秒、消散回血50%（低出现率）
+     *       行者 疾步 移速+0→200%（攻击/攻速降至50%）/ 动能 攻击·移速+0→100%（血量45%、攻速66%）/ 追击 攻速·移速+0→100%（血量45%、攻击66%）
+     *       吞噬 每20秒吃身边敌方子弹，回血 = 子弹伤害和×25%（上限 360 + 25% 已损失生命，溢出转盾）
+     *       动能反击 每秒快照血+盾，衰减则发 1~3 枚导弹（伤害=衰减量，倍率 1.5→3，40 格射程/60 格追踪）
      * 中级：数值 +25%   / 2 架僚机 / 炮击 / 减伤 50% / 共血（血量需 >50%）/ 盾转血 50→40 / 血转盾 20% / 反伤 20→60%（24 格）
      *       短时爆发 14秒连4秒×1.75（17 格，2 目标）/ 血量转移 100%（17 格，敌2己2）/ 分裂 低于40%→2×25% / 共享回复 受伤4%、治疗8%（15 格，5 人）
      *       浴血 攻击 +0→300%、攻速 +0→210%、移速 +0→230%（开火后激活，每秒扣当前生命1%）
      *       玻璃大炮 生命30%/伤600% | 轻装 生命40%/速450%/攻速150% | 重装 速35%/生命360%/伤200% | 刮痧 攻速300%/伤36% / 势大力沉 攻速35%/伤375% / 幽影 23格12秒 / 扭曲 14格12秒 / 回收 15格/2槽/存7/4秒 / 标印 10格2标签
      *       残影 每2秒快照、2 个、存续4秒、消散回血75%（低出现率）
+     *       行者 疾步 +0→400% / 动能 +0→200% / 追击 +0→200%（代价同低级）
+     *       吞噬 每15秒 / 回血 50%（同低级）
+     *       动能反击 1~5 枚 / 倍率 1.5→4.5
      * 高级：数值 +50%   / 3 架僚机 / 减伤 75% / 共血（血量需 >1）  / 盾转血 60→60 / 血转盾 30% / 反伤 30→75%（30 格）
      *       短时爆发 10秒连5秒×3（21 格，3 目标）/ 血量转移 125%（21 格，敌3己2）/ 分裂 低于50%→2×35% / 共享回复 受伤6%、治疗12%（20 格，7 人）/ 弹幕环绕 每10秒控2.5秒（2.5×抓、2×绕）
      *       浴血 攻击 +0→400%、攻速 +0→280%、移速 +0→320%（开火后激活，每秒扣当前生命1%）
      *       玻璃大炮 生命10%/伤1000% | 轻装 生命20%/速750%/攻速175% | 重装 速15%/生命480%/伤250% | 刮痧 攻速400%/伤29% / 势大力沉 攻速10%/伤1500% / 幽影 30格9秒 / 扭曲 18格9秒 / 回收 20格/3槽/存9/5秒 / 标印 14格3标签
      *       残影 每2秒快照、3 个、存续4秒、消散回血100%（低出现率）
+     *       行者 疾步 +0→600% / 动能 +0→300% / 追击 +0→300%（代价同低级）
+     *       吞噬 每10秒 / 回血 75%
+     *       动能反击 1~7 枚 / 倍率 1.5→6
      */
     public static StatusEffect[][] getTierPools() {
         StatusEffect[][] pools = new StatusEffect[PVESettings.TIER_COUNT][];
@@ -583,7 +681,8 @@ public class raenStatusEffects {
                 BloodAtkA, BloodRateA, BloodMoveA,
                 GlassCannonA, NimbleA, HeavyArmorA, ScratcherA, MightyA, ShadowA, DistortA, SalvageA,
                 MarkRandomA, MarkFixedA, AfterimageA,
-                OffenseAtkA, OffenseRateA);
+                OffenseAtkA, OffenseRateA,
+                WalkerSprintA, WalkerKineticA, WalkerPursuerA, DevourA, KineticCounterA);
         pools[PVESettings.TIER_MID] = buildPool(
                 SpeedB, HealthB, DamageB, ReloadB,
                 GenerateWingmanB, BulletSpawnArtillery, DamageReductionB, TeamHealthB,
@@ -592,7 +691,8 @@ public class raenStatusEffects {
                 BloodAtkB, BloodRateB, BloodMoveB,
                 GlassCannonB, NimbleB, HeavyArmorB, ScratcherB, MightyB, ShadowB, DistortB, SalvageB,
                 MarkRandomB, MarkFixedB, AfterimageB,
-                OffenseAtkB, OffenseRateB);
+                OffenseAtkB, OffenseRateB,
+                WalkerSprintB, WalkerKineticB, WalkerPursuerB, DevourB, KineticCounterB);
         pools[PVESettings.TIER_HIGH] = buildPool(
                 SpeedC, HealthC, DamageC, ReloadC,
                 GenerateWingmanC, DamageReductionC, TeamHealthC,
@@ -601,7 +701,8 @@ public class raenStatusEffects {
                 BloodAtkC, BloodRateC, BloodMoveC,
                 GlassCannonC, NimbleC, HeavyArmorC, ScratcherC, MightyC, ShadowC, DistortC, SalvageC,
                 MarkRandomC, MarkFixedC, AfterimageC,
-                OffenseAtkC, OffenseRateC);
+                OffenseAtkC, OffenseRateC,
+                WalkerSprintC, WalkerKineticC, WalkerPursuerC, DevourC, KineticCounterC);
         return pools;
     }
 
@@ -651,6 +752,12 @@ public class raenStatusEffects {
                 {MarkRandomA, MarkRandomB, MarkRandomC, MarkFixedA, MarkFixedB, MarkFixedC},
                 {AfterimageA, AfterimageB, AfterimageC},
                 {OffenseAtkA, OffenseAtkB, OffenseAtkC, OffenseRateA, OffenseRateB, OffenseRateC},
+                // 行者系 9 个互相排斥：三族共用「持续移动蓄力」机制，共存会互相叠加倍率与代价
+                {WalkerSprintA, WalkerSprintB, WalkerSprintC,
+                 WalkerKineticA, WalkerKineticB, WalkerKineticC,
+                 WalkerPursuerA, WalkerPursuerB, WalkerPursuerC},
+                {DevourA, DevourB, DevourC},
+                {KineticCounterA, KineticCounterB, KineticCounterC},
         };
     }
 
