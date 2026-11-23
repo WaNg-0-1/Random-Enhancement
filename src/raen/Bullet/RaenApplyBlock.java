@@ -6,6 +6,7 @@ import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
 import arc.graphics.g2d.Lines;
+import arc.graphics.g2d.TextureRegion;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.ui.Image;
@@ -20,6 +21,7 @@ import arc.scene.ui.layout.Table;
 import arc.scene.style.TextureRegionDrawable;
 import mindustry.Vars;
 import mindustry.content.Fx;
+import mindustry.content.Items;
 import mindustry.entities.TargetPriority;
 import mindustry.entities.bullet.BulletType;
 import mindustry.entities.bullet.ContinuousBulletType;
@@ -164,6 +166,25 @@ public class RaenApplyBlock extends Block {
     /** 削弱下限：伤害不会低于初始伤害的这个比例（0.5 = 50%）。 */
     public float weakenFloor = 0.5f;
 
+    /**
+     * 「白送的塑钢」标记（氧化物 10% 附带）。只是记账用：
+     * {@link RaenApplyBlockBuild#attachItems} 算名额占用时会把它从 bitCount 里扣掉，
+     * 所以这颗塑钢不会挤占 {@link #itemTagCaps} 的正式名额。命中结算完全走塑钢本身。
+     */
+    public static final String FREE_PLAST = "raenFreePlastanium";
+
+    /**
+     * 「这发子弹的物品标签已经被某个领域抽过」的标记。
+     * <p>
+     * 多个领域重叠时，子弹只在<b>第一个</b>领域那里抽一次物品标签，之后所有领域直接跳过：
+     * 既不重复 roll、也不重复扣次数，白送的塑钢也不会被后来的领域「买」成正式的。
+     * 主标签不受影响（它不耗次数、`attach` 幂等），仍然可以被更高级的领域补上。
+     */
+    public static final String APPLIED = "raenFieldApplied";
+
+    /** 氧化物：获得标签时白送一个「不占名额」塑钢标签的概率 */
+    public float oxideFreePlastChance = 0.10f;
+
     /** 敌方子弹削弱的载体标签：层数 = 初始伤害 × {@link #WEAKEN_SCALE} */
     public static final String WEAKEN = "raenWeaken";
     /** 伤害 → 标签层数的放大倍数（0.01 的精度） */
@@ -297,6 +318,23 @@ public class RaenApplyBlock extends Block {
     public Color triangleColorEnd = Color.valueOf("ff5b5b");
     /** 颜色由蓝转红对应的能量上限 */
     public int triangleColorFullEnergy = 8;
+
+    // ==================== 断电警告（装饰） ====================
+    /** 断电警告闪电颜色 */
+    public Color powerWarningColor = Color.valueOf("ff4030");
+    /** 断电警告的闪烁间隔（秒）：每 3 秒闪一次 */
+    public float powerWarningIntervalSeconds = 3f;
+    /** 单次闪烁的持续时长（秒）：每轮亮这么久，最后 0.2 秒淡出 */
+    public float powerWarningFlashSeconds = 1f;
+    /**
+     * 警告图标尺寸（格，1 = 8 像素）。默认 1 格：3×3 的方块上大约占 1/3 宽。
+     * <p>
+     * ⚠ 不要再用 {@code block.size * 8f * 系数} 那种写法：方块尺寸一改图标就跟着失控。
+     */
+    public float powerWarningSizeTiles = 1f;
+    /** 断电警告淡出时长（秒）：闪烁末尾这么长时间里透明度降到 0 */
+    private static final float FADE_SECONDS = 0.2f;
+
     /** 是否绘制中心互反三角形 */
     public boolean drawShape = true;
 
@@ -460,11 +498,18 @@ public class RaenApplyBlock extends Block {
         return true;
     }
 
-    /** 每秒耗电：能量到 {@link #powerStartEnergy} 才开始，每多 1 点 +{@link #powerPerEnergy}。 */
+    /**
+     * 每秒耗电：能量到 {@link #powerStartEnergy} 才开始，每多 1 点 +{@link #powerPerEnergy}。
+     * <p>
+     * ⚠ <b>单位坑（v160.4.02 修过）</b>：{@code consumePowerDynamic} 收的是「每 tick」的引擎单位，
+     * 而 {@link #powerPerEnergy} 是按<b>每秒</b>写的 —— 必须 /60 再返回。
+     * 之前直接返回 30，引擎按每 tick 30 算 ⇒ 4 种物品时需求 30×60 = <b>1800/秒</b>（设计值 30/秒）。
+     * 依据：{@code ConsumePower.display()} 里就是 {@code usage * 60f} 配 {@code powerSecond} 单位。
+     */
     private float powerNeed(Building build) {
         int energy = ((RaenApplyBlockBuild) build).energy();
         if (energy < powerStartEnergy) return 0f;
-        return (energy - powerStartEnergy + 1) * powerPerEnergy;
+        return (energy - powerStartEnergy + 1) * powerPerEnergy / 60f;
     }
 
     /** 当前能量下每发子弹最多带几种物品标签（0 = 一种都挂不上）。 */
@@ -493,7 +538,8 @@ public class RaenApplyBlock extends Block {
                 maxChargesPerItem, itemsPerCharge, itemCapacity, itemsPerCharge + itemCapacity, shotsPerItem)).append('\n');
         builder.append(Core.bundle.format("raen.block.stats.energy", energyPerItem)).append('\n');
         builder.append(Core.bundle.format("raen.block.stats.range", fmt(baseRangeTiles), fmt(rangePerEnergyTiles))).append('\n');
-        builder.append(Core.bundle.format("raen.block.stats.power", powerStartEnergy, (int) powerPerEnergy)).append('\n');
+        builder.append(Core.bundle.format("raen.block.stats.power", powerStartEnergy, (int) powerPerEnergy,
+                Math.max(0, powerStartEnergy - 1))).append('\n');
         builder.append(Core.bundle.get("raen.block.stats.mainsHeader")).append('\n');
 
         for (int i = 0; i < mainLadder.size; i++) {
@@ -520,6 +566,8 @@ public class RaenApplyBlock extends Block {
                     .append(Core.bundle.format("raen.block.stats.capsEntry", cap.energy, cap.count))
                     .append('\n');
         }
+        // 多领域重叠：物品标签只由第一个领域抽一次（APPLIED 标记）
+        builder.append("  · ").append(Core.bundle.get("raen.block.stats.applied")).append('\n');
 
         builder.append('\n').append(Core.bundle.get("raen.block.stats.weakenHeader")).append('\n');
         builder.append("  · ").append(Core.bundle.format("raen.block.stats.weaken",
@@ -611,6 +659,23 @@ public class RaenApplyBlock extends Block {
             return energy;
         }
 
+        /**
+         * 本帧<b>实际生效</b>的能量 —— 断电降级在这里。
+         * <p>
+         * 能量 ≥ {@link #powerStartEnergy} 时才需要通电；供电不足时不是整块停摆，而是
+         * <b>降级为「{@code powerStartEnergy - 1} 能量」那档</b>继续工作（那一档本来就不耗电）：
+         * 主标签按 3 能量解锁（追击 / 破绽）、物品标签上限按 3 能量算、范围也缩回 3 能量的范围、
+         * 削弹（需要 5 能量 + 电）自然关闭。
+         * <p>
+         * ⚠ 纯客户端直接返回额定能量：{@code potentialEfficiency} 来自电力网，MP 客户端拿不到，
+         * 否则有电时也会把范围圈画小。实际逻辑以服务端为准。
+         */
+        public int effectiveEnergy() {
+            if (energy < powerStartEnergy) return energy;
+            if (Vars.net.client()) return energy;
+            return potentialEfficiency < 0.99f ? Math.max(0, powerStartEnergy - 1) : energy;
+        }
+
         /** 当前装载的物品种类（供 {@link DrawFieldDeco} 循环取色）。 */
         public Seq<Item> stockedItems() {
             return stocked;
@@ -626,12 +691,13 @@ public class RaenApplyBlock extends Block {
          * 能量阶梯（{@link #itemTagCaps}）和 {@link #energyPerItem} 变了，解锁时机自动跟着变。
          */
         private boolean guaranteeUnlocked() {
-            return itemTagLimit(energy) >= guaranteeUnlockTags;
+            // 用降级后的能量：断电时只有 1 个物品标签名额，「必带」自然就不该解锁
+            return itemTagLimit(effectiveEnergy()) >= guaranteeUnlockTags;
         }
 
-        /** 当前作用半径（像素）。 */
+        /** 当前作用半径（像素）。断电时按降级后的能量算，圈会跟着变小。 */
         public float rangePx() {
-            return (baseRangeTiles + rangePerEnergyTiles * energy) * 8f;
+            return (baseRangeTiles + rangePerEnergyTiles * effectiveEnergy()) * 8f;
         }
 
         // ==================== 装载刷新 ====================
@@ -693,9 +759,10 @@ public class RaenApplyBlock extends Block {
             refresh();
             refreshLiquids();
 
-            int energy = this.energy;
-            // 0 能量也要生效：方块放下就自带追击
-            if (energy >= powerStartEnergy && potentialEfficiency < 0.99f) return;
+            int energy = effectiveEnergy();
+            // 0 能量也要生效：方块放下就自带追击。
+            // 能量 ≥ powerStartEnergy 但断电时不 return —— effectiveEnergy() 已把这一档降级成
+            // 「powerStartEnergy - 1」，继续跑那部分不耗电的功能（v160.4.02 起）。
 
             // 下面这个 range 同时是「己方挂标签」和「削弱敌方子弹」的范围：
             // 每次 updateTile 都按当前能量重算，能量加减立即生效，不再有第二个半径。
@@ -718,6 +785,8 @@ public class RaenApplyBlock extends Block {
                 }
                 // 碎片子弹不允许再挂任何标签（否则玻璃 / 塑钢会互相套娃）
                 if (RaenBulletMarks.hasBulletMark(bullet, RaenShards.NO_TAG)) return;
+                // 临时盾（布）：它不参与命中，挂标签纯浪费，而且它的 data 里存着护罩状态
+                if (bullet.type == RaenShieldBullet.type) return;
 
                 // 持续型瞬间命中子弹（融毁 / 升华 / 光辉）：每 5 tick 结算一次 = 12 次/秒，
                 // 连主标签都不能挂（追击 / 积焰 / 酸蚀 / 破绽 会被放大 4~12 倍），见 isContinuousType
@@ -849,26 +918,49 @@ public class RaenApplyBlock extends Block {
         private void attachItems(Bullet bullet, int limit, boolean instant) {
             if (limit <= 0) return;
 
+            // 这发子弹已经被某个领域抽过物品标签 ⇒ 后续领域直接跳过（见 APPLIED）
+            if (RaenBulletMarks.hasBulletMark(bullet, APPLIED)) return;
+
             // 分裂弹（fragBullet / intervalBullet 产出的子弹）数量极大：劫难一发主弹 ≈ 40 发/秒，
             // 再给它挂「生成类」标签就会滚雪球（每发都产碎片 → 每片又是一次命中）。
             boolean frag = RaenShards.isFragSpawned(bullet.type);
 
+            final int plastIndex = RaenItemTags.indexOf(Items.plastanium);
             long mask = RaenItemTags.maskOf(bullet);
-            int room = limit - Long.bitCount(mask);
+            // 「氧化物白送的塑钢」不占名额：算占用时把它扣掉（否则它会顶掉一个正式名额）。
+            // ★ 它只是「先垫上效果」——不阻止正式抽取再抽到塑钢（见下面两处的 convert）
+            boolean freePlast = plastIndex >= 0
+                    && (mask & (1L << plastIndex)) != 0L
+                    && RaenBulletMarks.hasBulletMark(bullet, FREE_PLAST);
+            int used = Long.bitCount(mask) - (freePlast ? 1 : 0);
+            int room = limit - Math.max(0, used);
             if (room <= 0) return;
+
+            /** 本次是否真的挂上了物品标签（挂了才打 APPLIED，空领域不会把子弹「锁死」） */
+            boolean attached = false;
 
             // ① 必带物品：优先挂上（要在已装载且余额够时才生效）
             Item guaranteed = guaranteedItem;
             if (guaranteed != null && room > 0
+                    && guaranteeUnlocked()                                  // 断电降级 / 名额不足时不允许「必带」
                     && (!instant || RaenItemTags.instantSafe(guaranteed))
                     && (!frag || !RaenItemTags.generates(guaranteed))) {
                 int index = RaenItemTags.indexOf(guaranteed);
+                boolean convert = freePlast && index == plastIndex;      // 必带恰好是那颗白送的塑钢
                 if (index >= 0                              // 有物品标签定义
-                    && (mask & (1L << index)) == 0L        // 这发子弹还没有这种物品的标签
+                    && ((mask & (1L << index)) == 0L || convert)   // 还没有这种标签（白送塑钢例外）
                     && stocked.contains(guaranteed)         // 已装载
                     && takeCharge(guaranteed)){             // 还有余额
-                    applyItem(bullet, guaranteed);
-                    mask |= (1L << index);
+                    if (convert) {
+                        // 白送的塑钢被正式选中 ⇒ 转成占名额的正式标签（标签本身不变，只改记账）
+                        RaenBulletMarks.removeBulletMark(bullet, FREE_PLAST);
+                        freePlast = false;
+                    } else {
+                        applyItem(bullet, guaranteed);
+                    }
+                    mask = RaenItemTags.maskOf(bullet);     // applyItem 可能白送塑钢，重新读
+                    freePlast = RaenBulletMarks.hasBulletMark(bullet, FREE_PLAST);
+                    attached = true;
                     room--;
                 }
             }
@@ -879,13 +971,12 @@ public class RaenApplyBlock extends Block {
                 Item item = stocked.get(i);
                 int index = RaenItemTags.indexOf(item);
                 if (index < 0) continue;
-                if ((mask & (1L << index)) != 0L) continue;   // 这发子弹已经有这种物品的标签了
+                // 已经有这种标签就跳过 —— 例外：白送的塑钢仍参与抽取（抽中后转为占名额）
+                if ((mask & (1L << index)) != 0L && !(freePlast && index == plastIndex)) continue;
                 if (instant && !RaenItemTags.instantSafe(item)) continue;  // 瞬中弹只带纯加伤/纯状态类
                 if (frag && RaenItemTags.generates(item)) continue;        // 分裂弹不带生成类标签
                 candidates.add(item);
             }
-            if (candidates.size == 0) return;
-
             int count = Math.min(room, candidates.size);
             for (int i = 0; i < count; i++) {
                 // 从剩余候选里随机取一个，取过的挪到前面去（洗牌式不重复抽取）
@@ -894,9 +985,27 @@ public class RaenApplyBlock extends Block {
                 candidates.set(pick, candidates.get(i));
                 candidates.set(i, item);
 
+                int index = RaenItemTags.indexOf(item);
+                if (index < 0) continue;
+                boolean convert = freePlast && index == plastIndex;
+                // 上一发可能刚被氧化物「白送」了塑钢 ⇒ 这个候选已经有了，别白扣次数（白送的除外）
+                if ((mask & (1L << index)) != 0L && !convert) continue;
+
                 if (!takeCharge(item)) continue;
-                applyItem(bullet, item);
+                if (convert) {
+                    // 抽中了那颗白送的塑钢：占用名额、扣一次充能，但标签不变、效果仍只算一次
+                    RaenBulletMarks.removeBulletMark(bullet, FREE_PLAST);
+                    freePlast = false;
+                } else {
+                    applyItem(bullet, item);
+                }
+                mask = RaenItemTags.maskOf(bullet);   // applyItem 可能白送塑钢，重新读
+                freePlast = RaenBulletMarks.hasBulletMark(bullet, FREE_PLAST);
+                attached = true;
             }
+
+            // ③ 打标记：这发子弹的物品标签已由本领域抽过 ⇒ 后续领域不再插手
+            if (attached) RaenBulletMarks.addBulletMark(bullet, APPLIED, 1);
         }
 
         /** 真正挂标签：总开关 + 物品标签 + 一次性伤害修正 + 特殊行为。 */
@@ -913,6 +1022,45 @@ public class RaenApplyBlock extends Block {
 
             if (def.homing) RaenItemHit.INSTANCE.track(bullet, def.homingRangeTiles);
             if (def.glassShard) scheduleGlass(bullet);
+
+            // 氧化物：获得标签时还有概率白送一个「不占名额」的塑钢标签（完全继承）
+            if (item == Items.oxide) grantFreePlastanium(bullet);
+        }
+
+        /**
+         * 氧化物白送的塑钢标签：<b>不占 itemTagCaps 名额</b>，且与正常挂载<b>完全等价</b>。
+         * <p>
+         * 「完全继承」的落地方式：这里直接调 {@link #applyItem(Bullet, Item)} ——
+         * 和正式抽到的塑钢走<b>同一条路径</b>（同一个标签名、同一份 {@link RaenItemTag} 定义、
+         * 同样的「获得标签时」修正、命中时同一个 {@code plastaniumHit}）。
+         * 所以以后改塑钢的碎片数量 / 伤害 / 只带追击 / 延迟，这颗白送的塑钢会<b>自动跟着变</b>。
+         * <p>
+         * 它只是「先垫上效果」，<b>不阻止正式抽取再抽到塑钢</b>：
+         * <ul>
+         *   <li>{@link #attachItems} 里这颗塑钢仍留在候选池里；</li>
+         *   <li>正式抽中时走 {@code convert} 分支：扣一次充能、占一个名额、去掉 {@link #FREE_PLAST}，
+         *       标签本身不变 ⇒ 效果始终只算一次；</li>
+         *   <li>后续名额都没抽到塑钢，就保留白送的那颗（不占名额）。</li>
+         * </ul>
+         * 其它规则：概率 {@link #oxideFreePlastChance}（默认 10%）；已经有塑钢（正式或白送）就不再白送；
+         * 分裂弹 / 瞬间命中类不挂（前者会回到「子弹海」，后者本来就不吃生成类标签）；白送不扣充能。
+         */
+        private void grantFreePlastanium(Bullet bullet) {
+            if (!Mathf.chance(oxideFreePlastChance)) return;
+
+            Item item = Items.plastanium;
+            if (RaenItemTags.def(item) == null) return;
+
+            // 已经有塑钢（正式或白送）⇒ 不重复挂，效果只生效一次
+            if (RaenItemTags.has(RaenItemTags.maskOf(bullet), item)) return;
+
+            if (RaenShards.isFragSpawned(bullet.type)) return;
+            if (isInstantHitType(bullet.type)) return;
+
+            // ★ 完全继承：走正常挂载的同一条路径（不是手写一份「简化版塑钢」）
+            applyItem(bullet, item);
+            // 只是记账：算名额占用时把这颗塑钢扣掉（不占名额）
+            RaenBulletMarks.addBulletMark(bullet, FREE_PLAST, 1);
         }
 
         // ==================== 液体 ====================
@@ -1261,7 +1409,9 @@ public class RaenApplyBlock extends Block {
             // 四属性在 refresh() 里已经按方块物品合计算好（attr）
 
             // 本帧生效的主标签（0 能量也有追击）
-            collectActive(energy);
+            // ★ 用「生效能量」：断电降级时只能挂到 3 能量那一档，面板不能显示满了的列表
+            final int eff = effectiveEnergy();
+            collectActive(eff);
             StringBuilder tags = new StringBuilder();
             for (int i = 0; i < active.size; i++) {
                 RaenEffect effect = active.get(i).effect;
@@ -1271,14 +1421,20 @@ public class RaenApplyBlock extends Block {
             }
 
             table.row();
-            table.add(Core.bundle.format("raen.block.panel.energy", energy, stocked.size, itemTagLimit(energy)))
+            table.add(Core.bundle.format("raen.block.panel.energy", energy, stocked.size, itemTagLimit(eff)))
                     .left().padTop(4f);
+            // 断电降级单独一行：⚠ 不要在数字里拼「→」那种箭头，默认字体没有该字形，会被吞成「53」
+            if (eff != energy) {
+                table.row();
+                table.add(Core.bundle.format("raen.block.panel.energyLow", eff))
+                        .left().padTop(2f).growX().wrap();
+            }
 
             table.row();
             table.add(Core.bundle.format("raen.block.panel.range", (int) (rangePx() / 8f)))
                     .left().padTop(2f);
 
-            if (energy >= weakenStartEnergy) {
+            if (eff >= weakenStartEnergy) {
                 table.row();
                 table.add(Core.bundle.format("raen.block.panel.weaken",
                         fmt(weakenPerSecond * 100f), fmt(weakenFloor * 100f))).left().padTop(2f).growX().wrap();
@@ -1314,6 +1470,7 @@ public class RaenApplyBlock extends Block {
             // 范围圈不在这里画：方块本体离屏时 draw() 不会调用，圈会跟着消失。
             // 统一由 drawAllRanges()（Trigger.draw）按圆形画，见 drawRange()。
             if (drawShape) drawTriangles();
+            drawPowerWarning();
             Draw.reset();
         }
 
@@ -1322,9 +1479,11 @@ public class RaenApplyBlock extends Block {
          * 最多 {@link RaenApplyBlock#triangleMaxGroups} 组。颜色随能量从蓝渐变到红。
          */
         private void drawTriangles() {
-            float alpha = potentialEfficiency;
-            if (alpha <= 0f) return;
+            // 断电也要画：以前 alpha = potentialEfficiency，没电时直接 return ⇒ 整个形状消失。
+            // 现在给个下限（0.4），断电时半透明但仍可见；有电则按供电比例淡入。
+            float alpha = Math.max(0.4f, potentialEfficiency);
 
+            // 组数仍按「额定能量」算：11 能量就是 3 组，不会因为断电少画
             int groups = Math.min(triangleMaxGroups, 1 + energy / triangleEnergyStep);
             float t = triangleColorFullEnergy <= 0 ? 0f
                     : Mathf.clamp((float) energy / triangleColorFullEnergy);
@@ -1345,19 +1504,42 @@ public class RaenApplyBlock extends Block {
             Draw.color();
         }
 
-        @Override
-        public void drawConfigure() {
-            super.drawConfigure();
-            // 范围圈由 drawAllRanges() 统一绘制，这里不重复画
-        }
+        /**
+         * 断电警告（纯装饰）：能量进入「要通电」的档位（≥ {@link #powerStartEnergy}）但没接电时，
+         * 在方块处每 {@link #powerWarningIntervalSeconds} 秒闪一次<b>原版警告图标</b>（{@link Icon#warning}）；
+         * 通电后立刻消失。
+         * <p>
+         * 直接用 {@link Icon#warning} 的贴图绘制（不生成 {@code Effect} 实体、不占特效表）。
+         * 贴图本身是白色描边（图标字体那套）⇒ 必须用 {@code Draw.color(powerWarningColor, alpha)} 染红，
+         * 尺寸由 {@link #powerWarningSizeTiles}（格）直接换算像素，不受方块尺寸影响。
+         */
+        private void drawPowerWarning() {
+            if (energy < powerStartEnergy) return;          // 0~3 能量本来就不耗电，不提示
+            if (potentialEfficiency >= 0.99f) return;       // 有电 ⇒ 不画
+            if (!enabled) return;                           // 玩家手动关掉的方块不刷警告
 
-        @Override
-        public void drawSelect() {
-            super.drawSelect();
-            // 物品列表在点击方块弹出的面板里（buildConfiguration），不在世界内画
-        }
+            // 每 interval 秒亮 flash 秒：先满亮度，最后 FADE_SECONDS 秒淡出
+            float interval = Math.max(0.1f, powerWarningIntervalSeconds);
+            float flash = Mathf.clamp(powerWarningFlashSeconds, 0.01f, interval);
+            float phase = (Time.time / 60f) % interval;
+            if (phase > flash) return;
+            float alpha = Mathf.clamp((flash - phase) / FADE_SECONDS, 0f, 1f);
 
-        // ==================== 范围圈 ====================
+            // 尺寸按「格」给，直接换算成像素，不再乘 block.size
+            float size = Mathf.clamp(powerWarningSizeTiles * 8f, 4f, 32f);
+            float prevZ = Draw.z();
+
+            Draw.z(Layer.effect + 1.5f);
+            Draw.color(powerWarningColor, alpha);       // 图标本体是白色描边贴图 ⇒ 用警告色染色
+            TextureRegion icon = Icon.warning.getRegion();
+            Draw.rect(icon, x, y, size, size);          // rect(region) 以中心点绘制
+
+            // 一点红光，暗处也能看见
+            Drawf.light(x, y, size * 0.9f, powerWarningColor, alpha * 0.5f);
+
+            Draw.color();
+            Draw.z(prevZ);
+        }
 
         /**
          * 范围圈：<b>真正的生效范围是圆形</b>（命中判定走 `dst2`），所以画圆而不是方框。
@@ -1493,10 +1675,16 @@ public class RaenApplyBlock extends Block {
                     .left().padLeft(4f).padBottom(2f);
             cont.row();
 
-            // ② 能量 / 物品上限
-            cont.add(Core.bundle.format("raen.block.panel.energy", energy, stocked.size, itemTagLimit(energy)))
-                    .left().padLeft(4f).padBottom(4f);
+            // ② 能量 / 物品上限（断电降级时按降级后的能量显示）
+            final int eff = effectiveEnergy();
+            cont.add(Core.bundle.format("raen.block.panel.energy", energy, stocked.size, itemTagLimit(eff)))
+                    .left().padLeft(4f).padBottom(2f);
             cont.row();
+            if (eff != energy) {
+                cont.add(Core.bundle.format("raen.block.panel.energyLow", eff))
+                        .left().padLeft(4f).padBottom(2f).growX().wrap();
+                cont.row();
+            }
 
             // ③ 物品网格：5 列，图标 + 该物品剩余次数
             if (stocked.size == 0) {

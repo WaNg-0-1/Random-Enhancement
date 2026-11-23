@@ -128,12 +128,28 @@ public class RaenItemHit extends RaenEffectBase {
      */
     public float plastaniumDelayTicks = 30f;
 
-    /** 布：有盾目标的额外伤害比例 */
-    public float phaseShieldBonus = 0.25f;
-    /** 布：附带敌方护盾值比例 */
-    public float phaseShieldRatio = 0.01f;
-    /** 布：附带伤害封顶（× 子弹伤害） */
-    public float phaseShieldCap = 1.5f;
+    /** 布：有盾目标的额外伤害比例（12.5%） */
+    public float phaseShieldBonus = 0.125f;
+    /** 布：附带敌方护盾值比例（1.5%） */
+    public float phaseShieldRatio = 0.015f;
+    /** 布：附带伤害封顶（× 子弹伤害；250%） */
+    public float phaseShieldCap = 2.5f;
+    /** 布：对盾目标额外附加的真实伤害比例（5% 子弹伤害） */
+    public float phaseShieldTrueRatio = 0.05f;
+
+    /** 布：每层「临时盾」提供的生成概率（0.5%） */
+    public float phaseShieldChancePerStack = 0.005f;
+    /** 布：临时盾半径 = 该值 + 层数 × {@link #phaseShieldRadiusPerStack}（格） */
+    public float phaseShieldRadiusBase = 4f;
+    public float phaseShieldRadiusPerStack = 1f / 16f;
+    /** 布：临时盾时长 = 该值 + 层数 × {@link #phaseShieldSecondsPerStack}（秒） */
+    public float phaseShieldSecondsBase = 4f;
+    public float phaseShieldSecondsPerStack = 1f / 40f;
+    /** 布：临时盾固定血量（不受子弹伤害影响的部分） */
+    public float phaseShieldHpFlat = 360f;
+    /** 布：临时盾血量 = 固定值 + 子弹伤害 × (该值 + 层数 × {@link #phaseShieldHpPerStack})（150% + 3%/层） */
+    public float phaseShieldHpBase = 1.5f;
+    public float phaseShieldHpPerStack = 0.03f;
 
     /** 合金：闪电条数 */
     public int surgeMin = 1, surgeMax = 4;
@@ -155,7 +171,7 @@ public class RaenItemHit extends RaenEffectBase {
     public float blastSeconds = 3f;
     /** 氧化物：腐蚀半径（格）与时间（秒） */
     public float oxideRadiusTiles = 3.6f;
-    public float oxideSeconds = 4f;
+    public float oxideSeconds = 3f;
     /** 硫：燃烧时间（秒） */
     public float burnSeconds = 5f;
     /** 孢子夹：孢子减速时间（秒） */
@@ -210,6 +226,8 @@ public class RaenItemHit extends RaenEffectBase {
     private final ObjectIntMap<Healthc> spore = new ObjectIntMap<>();
     /** 沙子：目标 → 层数 */
     private final ObjectIntMap<Healthc> sand = new ObjectIntMap<>();
+    /** 布：目标 → 「临时盾」层数（决定生成概率 / 半径 / 时长 / 血量） */
+    private final ObjectIntMap<Healthc> phaseShield = new ObjectIntMap<>();
     /** 废料：目标 → {剩余层数, 计时} */
     private final ObjectMap<Healthc, float[]> scrap = new ObjectMap<>();
     /** 硅：需要追踪的子弹 */
@@ -471,19 +489,46 @@ public class RaenItemHit extends RaenEffectBase {
         shard.time = 0f;
     }
 
-    /** 布：对盾目标加伤、附带护盾值伤害、施加转命 */
+    /**
+     * 布：命中施加 1 层转命并叠 1 层「临时盾」；层数越高，越可能在命中处开出一个临时护罩。
+     * <p>
+     * <ul>
+     *   <li>转命：<b>只对单位</b>（转命效果本身限定单位），每次命中 1 层；</li>
+     *   <li>临时盾：<b>单位与建筑都生效</b> —— 建筑也叠层、也能在命中处生成护罩
+     *       （层数与护罩都不依赖单位属性）；概率 = 层数 × {@link #phaseShieldChancePerStack}
+     *       （0.5%/层，封顶 100%），生成后清空层数。半径 / 时长 / 血量都随层数增长，见各字段；</li>
+     *   <li>有盾目标：<b>只对单位</b>（建筑没有护盾），额外 +{@link #phaseShieldBonus 12.5%} 伤害、
+     *       附带 1.5% 护盾值的伤害（封顶 250% 子弹伤害）、并附加 5% 子弹伤害的真实伤害。</li>
+     * </ul>
+     */
     private void phaseFabricHit(float damage) {
-        if (!(ctxTarget instanceof Unit)) return;
+        if (ctxTarget == null) return;
 
-        Unit unit = (Unit) ctxTarget;
-        if (unit.shield <= 0f) return;
+        // ① 转命：只有单位能叠（效果本身限定单位）
+        if (ctxTarget instanceof Unit unit) {
+            RaenEffectZM.INSTANCE.applyTo(unit, 1, ctxTeam, damage);
+        }
 
-        float bonus = damage * phaseShieldBonus;
-        float shieldBonus = Math.min(unit.shield * phaseShieldRatio, damage * phaseShieldCap);
-        unit.damage(bonus + shieldBonus);
+        // ② 临时盾：单位与建筑都会叠层 + 掷概率生成护罩（本条只放开「生成」）
+        int stacks = phaseShield.get(ctxTarget, 0) + 1;
+        phaseShield.put(ctxTarget, stacks);
 
-        RaenEffectZM.INSTANCE.applyTo(unit, 1, ctxTeam, damage);
-        Fx.hitLaser.at(ctxX, ctxY, 0f, phaseColor);
+        if (Mathf.chance(Math.min(1f, stacks * phaseShieldChancePerStack))) {
+            RaenShieldBullet.spawn(ctxTeam, ctxX, ctxY,
+                    (phaseShieldRadiusBase + stacks * phaseShieldRadiusPerStack) * 8f,
+                    (phaseShieldSecondsBase + stacks * phaseShieldSecondsPerStack) * 60f,
+                    phaseShieldHpFlat + damage * (phaseShieldHpBase + stacks * phaseShieldHpPerStack));
+            phaseShield.remove(ctxTarget, 0);       // 生成后清层，重新累计
+        }
+
+        // ③ 有盾目标：额外伤害 + 护盾值伤害 + 真伤（护盾是单位专属，建筑没有这一步）
+        if (ctxTarget instanceof Unit unit && unit.shield > 0f) {
+            float bonus = damage * phaseShieldBonus;
+            float shieldBonus = Math.min(unit.shield * phaseShieldRatio, damage * phaseShieldCap);
+            unit.damage(bonus + shieldBonus);
+            trueDamage(unit, damage * phaseShieldTrueRatio);
+            Fx.hitLaser.at(ctxX, ctxY, 0f, phaseColor);
+        }
     }
 
     /** 合金：1-4 条闪电 + 1 层连锁 */
@@ -703,6 +748,7 @@ public class RaenItemHit extends RaenEffectBase {
             coal.remove(target, 0);
             spore.remove(target, 0);
             sand.remove(target, 0);
+            phaseShield.remove(target, 0);
             scrap.remove(target);
         }
     }
@@ -713,6 +759,7 @@ public class RaenItemHit extends RaenEffectBase {
         coal.clear();
         spore.clear();
         sand.clear();
+        phaseShield.clear();
         scrap.clear();
         homing.clear();
         expired.clear();
