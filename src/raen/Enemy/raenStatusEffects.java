@@ -45,14 +45,14 @@ public class raenStatusEffects {
     public static StatusEffect ShadowA, ShadowB, ShadowC;                 // 15格/15秒、23格/12秒、30格/9秒
 
     // ---- 扭曲：周期性抢走范围内敌方子弹并折返 ----
-    public static StatusEffect DistortA, DistortB, DistortC;              // 10格/15秒、14格/12秒、18格/9秒
+    public static StatusEffect DistortA, DistortB, DistortC;              // 碰撞体积+1/2/3格，生效0.5/0.9/1.3秒，冷却15/12/9秒
 
     // ---- 回收：范围内有单位死亡时抢它的武器（不分敌我），限时使用 ----
     public static StatusEffect SalvageA, SalvageB, SalvageC;              // 10格/1槽/存5/3秒、15格/2槽/存7/4秒、20格/3槽/存9/5秒
 
     // ---- 标印：给范围内的己方子弹附加随机标签 ----
-    public static StatusEffect MarkRandomA, MarkRandomB, MarkRandomC;     // 6/10/14 格，1/2/3 标签，实时随机
-    public static StatusEffect MarkFixedA, MarkFixedB, MarkFixedC;        // 6/10/14 格，1/2/3 标签，获得时抽取并固定
+    public static StatusEffect MarkRandomA, MarkRandomB, MarkRandomC;     // 碰撞体积×1.5/2/2.5，1/2/3 标签，实时随机
+    public static StatusEffect MarkFixedA, MarkFixedB, MarkFixedC;        // 碰撞体积×1.5/2/2.5，1/2/3 标签，获得时抽取并固定
 
     // ---- 进攻：持续攻击累积倍率，攻击 / 攻速两条路线 ----
     public static StatusEffect OffenseAtkA, OffenseAtkB, OffenseAtkC;     // 攻击 200%/400%/600%，移速血量 25%
@@ -291,12 +291,12 @@ public class raenStatusEffects {
         addToContent(MightyB);
         MightyC = makeBuff("MightyC", 1f, 1f, 15.0f, 0.10f, COLOR_MIGHTY);
         addToContent(MightyC);
-        // ============ 扭曲：低级随机/中180±45/高180，10/14/18 格，生效1/1.5/2秒后冷却15/12/9秒 ============
-        DistortA = makeDistort("DistortA", 10f, 0.5f, 15f, 0.25f, 0.75f, 180f, COLOR_DISTORT);
+        // ============ 扭曲：半径=碰撞体积+1/2/3格，生效0.5/0.9/1.3秒，冷却15/12/9秒 ============
+        DistortA = makeDistort("DistortA", 1f, 0.5f, 15f, 0.25f, 0.75f, 180f, COLOR_DISTORT);
         addToContent(DistortA);
-        DistortB = makeDistort("DistortB", 14f, 0.75f, 12f, 0.50f, 0.5f, 45f, COLOR_DISTORT);
+        DistortB = makeDistort("DistortB", 2f, 0.9f, 12f, 0.50f, 0.5f, 45f, COLOR_DISTORT);
         addToContent(DistortB);
-        DistortC = makeDistort("DistortC", 18f, 1f, 9f, 0.75f, 0.26f, 0f, COLOR_DISTORT);
+        DistortC = makeDistort("DistortC", 3f, 1.3f, 9f, 0.75f, 0.26f, 0f, COLOR_DISTORT);
         addToContent(DistortC);
         // ============ 回收：10/15/20 格，使用槽位 1/2/3 个，队列容量 5/7/9，时长 3/4/5 秒 ============
         SalvageA = makeSalvage("SalvageA", 10f, 1, 5, 3f, COLOR_SALVAGE);
@@ -305,18 +305,18 @@ public class raenStatusEffects {
         addToContent(SalvageB);
         SalvageC = makeSalvage("SalvageC", 20f, 3, 9, 5f, COLOR_SALVAGE);
         addToContent(SalvageC);
-        // ============ 标印：6/10/14 格，每颗子弹 1/2/3 个标签，随机 / 固定两种 ============
-        MarkRandomA = makeMark("MarkRandomA", 6f, 1, false, COLOR_MARK_RANDOM);
+        // ============ 标印：半径 = 携带者碰撞体积 × 1.5/2/2.5，每颗子弹 1/2/3 个标签 ============
+        MarkRandomA = makeMark("MarkRandomA", 1.5f, 1, false, COLOR_MARK_RANDOM);
         addToContent(MarkRandomA);
-        MarkRandomB = makeMark("MarkRandomB", 10f, 2, false, COLOR_MARK_RANDOM);
+        MarkRandomB = makeMark("MarkRandomB", 2f, 2, false, COLOR_MARK_RANDOM);
         addToContent(MarkRandomB);
-        MarkRandomC = makeMark("MarkRandomC", 14f, 3, false, COLOR_MARK_RANDOM);
+        MarkRandomC = makeMark("MarkRandomC", 2.5f, 3, false, COLOR_MARK_RANDOM);
         addToContent(MarkRandomC);
-        MarkFixedA = makeMark("MarkFixedA", 6f, 1, true, COLOR_MARK_FIXED);
+        MarkFixedA = makeMark("MarkFixedA", 1.5f, 1, true, COLOR_MARK_FIXED);
         addToContent(MarkFixedA);
-        MarkFixedB = makeMark("MarkFixedB", 10f, 2, true, COLOR_MARK_FIXED);
+        MarkFixedB = makeMark("MarkFixedB", 2f, 2, true, COLOR_MARK_FIXED);
         addToContent(MarkFixedB);
-        MarkFixedC = makeMark("MarkFixedC", 14f, 3, true, COLOR_MARK_FIXED);
+        MarkFixedC = makeMark("MarkFixedC", 2.5f, 3, true, COLOR_MARK_FIXED);
         addToContent(MarkFixedC);
         // ============ 进攻：连续攻击 60 秒蓄满，攻击 / 攻速各三档 ============
         OffenseAtkA = makeOffense("OffenseAtkA", raen.Enemy.StatusEffectCore.OffenseEffect.Kind.DAMAGE, 2f, COLOR_OFFENSE_ATK);
@@ -608,9 +608,9 @@ public class raenStatusEffects {
         return effect;
     }
 
-    private static StatusEffect makeMark(String name, float rangeTiles, int tagCount, boolean fixed, Color color) {
+    private static StatusEffect makeMark(String name, float rangeHitSizeMul, int tagCount, boolean fixed, Color color) {
         raen.Bullet.RaenMarkStatus effect = new raen.Bullet.RaenMarkStatus(name);
-        effect.range = rangeTiles * Vars.tilesize;
+        effect.rangeHitSizeMul = rangeHitSizeMul;
         effect.tagCount = tagCount;
         effect.fixed = fixed;
         effect.damage = 0f;
@@ -649,7 +649,7 @@ public class raenStatusEffects {
      * 低级：数值 +12.5% / 1 架僚机 / 减伤 25% / 共血（血量需 >75%）/ 盾转血 36→20 / 血转盾 10% / 反伤 10→45%（18 格）
      *       短时爆发 18秒连3秒×0.75（13 格，1 目标）/ 血量转移 75%（13 格，敌1己1）/ 分裂 低于30%→2×15% / 共享回复 受伤2%、治疗5%（10 格，3 人）/ 点燃 每5秒（3×碰撞体积）
      *       浴血 攻击 +0→200%、攻速 +0→150%、移速 +0→160%（开火后激活，每秒扣当前生命1%）
-     *       玻璃大炮 生命50%/伤200% | 轻装 生命60%/速200%/攻速125% | 重装 速60%/生命240%/伤150% | 刮痧 攻速200%/伤52% / 势大力沉 攻速60%/伤200% / 幽影 15格15秒 / 扭曲 10格15秒 / 回收 10格/1槽/存5/3秒 / 标印 6格1标签
+     *       玻璃大炮 生命50%/伤200% | 轻装 生命60%/速200%/攻速125% | 重装 速60%/生命240%/伤150% | 刮痧 攻速200%/伤52% / 势大力沉 攻速60%/伤200% / 幽影 15格15秒 / 扭曲 碰撞+1格·0.5秒·冷却15秒 / 回收 10格/1槽/存5/3秒 / 标印 碰撞×1.5·1标签
      *       残影 每2秒快照、1 个、存续4秒、消散回血50%（低出现率）
      *       行者 疾步 移速+0→200%（攻击/攻速降至50%）/ 动能 攻击·移速+0→100%（血量45%、攻速66%）/ 追击 攻速·移速+0→100%（血量45%、攻击66%）
      *       吞噬 每20秒吃身边敌方子弹，回血 = 子弹伤害和×25%（上限 360 + 25% 已损失生命，溢出转盾）
@@ -657,7 +657,7 @@ public class raenStatusEffects {
      * 中级：数值 +25%   / 2 架僚机 / 炮击 / 减伤 50% / 共血（血量需 >50%）/ 盾转血 50→40 / 血转盾 20% / 反伤 20→60%（24 格）
      *       短时爆发 14秒连4秒×1.75（17 格，2 目标）/ 血量转移 100%（17 格，敌2己2）/ 分裂 低于40%→2×25% / 共享回复 受伤4%、治疗8%（15 格，5 人）
      *       浴血 攻击 +0→300%、攻速 +0→210%、移速 +0→230%（开火后激活，每秒扣当前生命1%）
-     *       玻璃大炮 生命30%/伤600% | 轻装 生命40%/速450%/攻速150% | 重装 速35%/生命360%/伤200% | 刮痧 攻速300%/伤36% / 势大力沉 攻速35%/伤375% / 幽影 23格12秒 / 扭曲 14格12秒 / 回收 15格/2槽/存7/4秒 / 标印 10格2标签
+     *       玻璃大炮 生命30%/伤600% | 轻装 生命40%/速450%/攻速150% | 重装 速35%/生命360%/伤200% | 刮痧 攻速300%/伤36% / 势大力沉 攻速35%/伤375% / 幽影 23格12秒 / 扭曲 碰撞+2格·0.9秒·冷却12秒 / 回收 15格/2槽/存7/4秒 / 标印 碰撞×2·2标签
      *       残影 每2秒快照、2 个、存续4秒、消散回血75%（低出现率）
      *       行者 疾步 +0→400% / 动能 +0→200% / 追击 +0→200%（代价同低级）
      *       吞噬 每15秒 / 回血 50%（同低级）
@@ -665,7 +665,7 @@ public class raenStatusEffects {
      * 高级：数值 +50%   / 3 架僚机 / 减伤 75% / 共血（血量需 >1）  / 盾转血 60→60 / 血转盾 30% / 反伤 30→75%（30 格）
      *       短时爆发 10秒连5秒×3（21 格，3 目标）/ 血量转移 125%（21 格，敌3己2）/ 分裂 低于50%→2×35% / 共享回复 受伤6%、治疗12%（20 格，7 人）/ 弹幕环绕 每10秒控2.5秒（2.5×抓、2×绕）
      *       浴血 攻击 +0→400%、攻速 +0→280%、移速 +0→320%（开火后激活，每秒扣当前生命1%）
-     *       玻璃大炮 生命10%/伤1000% | 轻装 生命20%/速750%/攻速175% | 重装 速15%/生命480%/伤250% | 刮痧 攻速400%/伤29% / 势大力沉 攻速10%/伤1500% / 幽影 30格9秒 / 扭曲 18格9秒 / 回收 20格/3槽/存9/5秒 / 标印 14格3标签
+     *       玻璃大炮 生命10%/伤1000% | 轻装 生命20%/速750%/攻速175% | 重装 速15%/生命480%/伤250% | 刮痧 攻速400%/伤29% / 势大力沉 攻速10%/伤1500% / 幽影 30格9秒 / 扭曲 碰撞+3格·1.3秒·冷却9秒 / 回收 20格/3槽/存9/5秒 / 标印 碰撞×2.5·3标签
      *       残影 每2秒快照、3 个、存续4秒、消散回血100%（低出现率）
      *       行者 疾步 +0→600% / 动能 +0→300% / 追击 +0→300%（代价同低级）
      *       吞噬 每10秒 / 回血 75%

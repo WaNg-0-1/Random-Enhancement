@@ -16,8 +16,8 @@ import mindustry.type.StatusEffect;
  */
 public class DistortEffect extends StatusEffect {
 
-    /** 作用半径（格）。 */
-    public float rangeTiles = 10f;
+    /** 作用半径（格）：实际半径 = 自身碰撞体积(hitSize) + rangeTiles × 8。 */
+    public float rangeTiles = 1f;
     /** 每次生效时长（秒）。 */
     public float activeSeconds = 1f;
     /** 生效结束后的冷却（秒）。周期 = activeSeconds + cooldownSeconds。 */
@@ -28,6 +28,8 @@ public class DistortEffect extends StatusEffect {
     public float timeScale = 0.5f;
     /** 偏转角度 = 原方向 + 180° ± spreadDegrees（360 就等价于全向随机）。 */
     public float spreadDegrees = 0f;
+    /** 抢弹时在子弹位置播放的特效。 */
+    public mindustry.entities.Effect stealEffect = Fx.hitBulletSmall;
 
     private final IntMap<Float> timers = new IntMap<>();
 
@@ -58,7 +60,8 @@ public class DistortEffect extends StatusEffect {
 
         if (timer >= activeSeconds) return;
 
-        float range = rangeTiles * Vars.tilesize;
+        // 半径 = 自身碰撞体积 + 额外格数（1/2/3 格），高级不再覆盖过大的场地
+        float range = unit.hitSize + rangeTiles * Vars.tilesize;
         if (range <= 0f) return;
 
         final float r2 = range * range;
@@ -77,7 +80,7 @@ public class DistortEffect extends StatusEffect {
 
             b.vel.setAngle(ang + 180f + Mathf.range(spreadDegrees));
 
-            Fx.hitBulletSmall.at(b.x, b.y);
+            stealEffect.at(b.x, b.y);
         });
     }
 

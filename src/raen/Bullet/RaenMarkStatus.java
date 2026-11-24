@@ -14,8 +14,8 @@ import mindustry.type.StatusEffect;
  */
 public class RaenMarkStatus extends StatusEffect {
 
-    /** 作用半径（世界单位，8 = 1 格）。 */
-    public float range = 64f;
+    /** 作用半径 = 携带该效果单位的碰撞体积 × 这个系数（低级 1.5 / 中级 2 / 高级 2.5）。 */
+    public float rangeHitSizeMul = 1.5f;
     /** 每颗子弹最多附加几个标签。 */
     public int tagCount = 1;
     /** 每个标签的层数。 */
@@ -43,7 +43,7 @@ public class RaenMarkStatus extends StatusEffect {
             return;
         }
 
-        float range = this.range;
+        float range = rangeOf(unit);
         if (range <= 0f) return;
 
         // 抽奖池是白名单（RaenEffectPool）：只有显式登记的效果才会被标印抽到，
@@ -95,10 +95,15 @@ public class RaenMarkStatus extends StatusEffect {
         return list;
     }
 
+    /** 当前单位的实际作用半径（随体型缩放，小单位不再背着 14 格的大圈）。 */
+    public float rangeOf(Unit unit) {
+        return unit == null ? 0f : Math.max(1f, unit.hitSize) * rangeHitSizeMul;
+    }
+
     @Override
     public void draw(Unit unit) {
         if (!drawRange || unit == null || unit.dead()) return;
-        RaenEffectBase.drawAuraRange(unit.x, unit.y, range);
+        RaenEffectBase.drawAuraRange(unit.x, unit.y, rangeOf(unit));
     }
 
     @Override
