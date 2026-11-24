@@ -15,7 +15,7 @@ import mindustry.type.StatusEffect;
  *   <li>{@link Kind#corrode} —— 目标身上叠层，每层提供概率触发一次腐蚀；</li>
  *   <li>{@link Kind#areaDamage} —— 命中处造成范围伤害；</li>
  *   <li>{@link Kind#ignite} —— 点燃范围内的敌方目标（参考物品「硫」）；</li>
- *   <li>{@link Kind#freeze} —— 目标同时被冻结与静止；</li>
+ *   <li>{@link Kind#freeze} —— 目标身上叠层，层数% 概率触发 (100+层数)% 时长的冻结与静止，触发后清层；</li>
  *   <li>{@link Kind#shards} —— 命中处生成一枚碎片（参考物品「玻璃」）。</li>
  * </ul>
  * 文案全部走本地化：{@code raen.liquid.<key>.name} / {@code raen.liquid.<key>.effect}，
@@ -77,6 +77,10 @@ public class RaenLiquidTag {
     public int maxStacks = 100;
     /** {@link Kind#freeze} 里「静止」的持续时间（秒） */
     public float unmovingSeconds = 1f;
+    /** {@link Kind#freeze} 每层提供的触发概率（0.01 = 每层 1%；叠层触发后清层） */
+    public float freezeChancePerStack = 0.01f;
+    /** {@link Kind#freeze} 的叠层上限 */
+    public int freezeMaxStacks = 100;
 
     public RaenLiquidTag(Liquid liquid, String key, String color) {
         this.liquid = liquid;
@@ -135,11 +139,18 @@ public class RaenLiquidTag {
         return this;
     }
 
-    /** 冻结 + 静止 */
+    /** 命中叠层，层数% 概率触发：(100+层数)%×冻结 + (100+层数)%×静止，触发后清层 */
     public RaenLiquidTag freeze(float freezeSeconds, float unmovingSeconds) {
         this.kind = Kind.freeze;
         this.seconds = freezeSeconds;
         this.unmovingSeconds = unmovingSeconds;
+        return this;
+    }
+
+    /** 叠层触发概率 / 上限：默认每层 1%、上限 100 层 */
+    public RaenLiquidTag freezeStacks(float chancePerStack, int maxStacks) {
+        this.freezeChancePerStack = chancePerStack;
+        this.freezeMaxStacks = maxStacks;
         return this;
     }
 

@@ -11,6 +11,7 @@ import mindustry.graphics.Pal;
 import mindustry.type.StatusEffect;
 import mindustry.type.UnitType;
 import mindustry.type.unit.MissileUnitType;
+import raen.Enemy.RaenStatusDriver;
 
 public class Wingman extends StatusEffect {
     private static final ObjectMap<Unit, Seq<Unit>> droneMap = new ObjectMap<>();
@@ -63,7 +64,7 @@ public class Wingman extends StatusEffect {
             if (other.maxDronesPerUnit <= maxDronesPerUnit) continue;
             // 用 getDuration 判定「当前真的挂着」（直接查 statuses 列表，
             // 不受 gen UnitEntity / 组件 StatusComp 两条路径差异影响）。
-            if (unit.getDuration(other) > 0f) return false;
+            if (RaenStatusDriver.getDuration(unit, other) > 0f) return false;
         }
         return true;
     }

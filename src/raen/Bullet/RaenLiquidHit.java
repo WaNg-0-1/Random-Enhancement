@@ -33,7 +33,7 @@ import raen.Bullet.RaenLiquidTag.Kind;
  *   <li>芳油：目标身上叠层，每层 5% 概率施加 2 秒腐蚀；</li>
  *   <li>臭氧：命中处造成 3% 子弹伤害、4 格范围伤害；</li>
  *   <li>氢：点燃 5 格范围内的敌方目标（参考物品「硫」，但不额外积焰）；</li>
- *   <li>氮：对目标施加 2 秒冻结和 1 秒静止；</li>
+ *   <li>氮：命中叠层，每层 1% 概率触发；触发时按 (100+层数)% 施加冻结（2.5 秒基准）与静止（1 秒基准），然后清层；</li>
  *   <li>氰：命中处生成一枚碎片（伤害 = 子弹伤害 × 5%，完全穿甲）。</li>
  * </ul>
  * 芳油的层数记在<b>目标</b>身上（同一目标被连续命中才会叠起来），目标死亡或世界重置时自动清空。
@@ -60,6 +60,13 @@ public class RaenLiquidHit extends RaenEffectBase {
     /** 芳油：叠层上限 */
     public int corrodeMaxStacks = 100;
 
+    /** 氮：每层提供的触发概率（默认 1%） */
+    public float freezeChancePerStack = 0.01f;
+    /** 氮：叠层上限 */
+    public int freezeMaxStacks = 100;
+    /** 层数 → 时长倍率的换算：1 层 = 1%，即 (100+层数)% */
+    private static final float FREEZE_STACK_PERCENT = 0.01f;
+
     /** 氰碎片：伤害占子弹伤害的比例 */
     public float cyanogenShardRatio = 0.05f;
     /** 氰碎片：速度占原弹速度的比例 */
@@ -83,6 +90,8 @@ public class RaenLiquidHit extends RaenEffectBase {
 
     /** 芳油：目标 → 层数 */
     private final ObjectIntMap<Healthc> corrode = new ObjectIntMap<>();
+    /** 氮：目标 → 层数 */
+    private final ObjectIntMap<Healthc> freeze = new ObjectIntMap<>();
 
     private final RaenEffectText text;
 
@@ -209,10 +218,22 @@ public class RaenLiquidHit extends RaenEffectBase {
         Fx.fire.at(x, y);
     }
 
-    /** 氮：目标同时被冻结与静止 */
+    /**
+     * 氮：命中先叠层，再按「层数%」掷一次触发；触发后清层。
+     * 时长 = (100 + 层数)% × 基准秒数（每层 1% → 100 层时翻倍）。
+     */
     private void freezeHit(RaenLiquidTag def) {
-        applyStatus(ctxTarget, StatusEffects.freezing, def.seconds * 60f);
-        applyStatus(ctxTarget, StatusEffects.unmoving, def.unmovingSeconds * 60f);
+        int maxStacks = def.freezeMaxStacks > 0 ? def.freezeMaxStacks : freezeMaxStacks;
+        int stacks = Math.min(maxStacks, freeze.get(ctxTarget, 0) + 1);
+        freeze.put(ctxTarget, stacks);
+
+        float chance = def.freezeChancePerStack > 0f ? def.freezeChancePerStack : freezeChancePerStack;
+        if (Mathf.random() >= stacks * chance) return;
+        freeze.remove(ctxTarget, 0);
+
+        float scale = 1f + stacks * FREEZE_STACK_PERCENT;
+        applyStatus(ctxTarget, StatusEffects.unmoving, def.unmovingSeconds * 60f * scale);
+        applyStatus(ctxTarget, StatusEffects.freezing, def.seconds * 60f * scale);
     }
 
     /** 氰：命中处生成一枚完全穿甲的碎片 */
@@ -286,12 +307,16 @@ public class RaenLiquidHit extends RaenEffectBase {
     @Override
     public void clearLayer(Healthc target) {
         super.clearLayer(target);
-        if (target != null) corrode.remove(target, 0);
+        if (target != null) {
+            corrode.remove(target, 0);
+            freeze.remove(target, 0);
+        }
     }
 
     @Override
     public void onReset() {
         corrode.clear();
+        freeze.clear();
         shardTypes.clear();
     }
 

@@ -86,7 +86,7 @@ public class BuffManager {
             if (allPool != null) {
                 for (StatusEffect effect : allPool) {
                     if (effect == null) continue;
-                    if (unit.getDuration(effect) > 0f) unit.unapply(effect);
+                    if (RaenStatusDriver.getDuration(unit, effect) > 0f) RaenStatusDriver.unapply(unit, effect);
                 }
             }
             if (isTarget(unit)) applyRandomBuffs(unit);
@@ -129,7 +129,7 @@ public class BuffManager {
             StatusEffect effect = pickEffect(PVESettings.rollTier(), chosen);
             if (effect == null) break;  // 所有等级的效果都已抽完
             chosen.add(effect);
-            unit.apply(effect, BASE_DURATION * diffMul);
+            RaenStatusDriver.apply(unit, effect, BASE_DURATION * diffMul);
             applied = true;
         }
         if (applied) rolledUnits.add(unit);
@@ -157,10 +157,10 @@ public class BuffManager {
         for (StatusEffect effect : new StatusEffect[]{raenStatusEffects.GenerateWingmanA,
                 raenStatusEffects.GenerateWingmanB, raenStatusEffects.GenerateWingmanC}){
             if (effect == keep) continue;
-            if (unit.getDuration(effect) > 0f) unit.unapply(effect);
+            if (RaenStatusDriver.getDuration(unit, effect) > 0f) RaenStatusDriver.unapply(unit, effect);
         }
-        if (unit.getDuration(keep) <= 0f) {
-            unit.apply(keep, BASE_DURATION * PVESettings.getDifficultyMultiplier());
+        if (RaenStatusDriver.getDuration(unit, keep) <= 0f) {
+            RaenStatusDriver.apply(unit, keep, BASE_DURATION * PVESettings.getDifficultyMultiplier());
         }
     }
     /** 把单位身上已经挂着的强化收进 chosen：既算「已占用」，也参与互斥判定。 */
@@ -169,7 +169,7 @@ public class BuffManager {
         for (StatusEffect effect : allPool) {
             if (effect == null) continue;
             // 同上：用 getDuration 读真实状态（直接查 statuses 列表，两条实体路径行为一致）。
-            if (unit.getDuration(effect) > 0f) out.add(effect);
+            if (RaenStatusDriver.getDuration(unit, effect) > 0f) out.add(effect);
         }
     }
     /**
@@ -196,7 +196,7 @@ public class BuffManager {
                 int hits = 0;
                 for (StatusEffect member : group) {
                     // 用 getDuration 判定「当前真的挂着」（直接查 statuses 列表）。
-                    if (member == null || unit.getDuration(member) <= 0f) continue;
+                    if (member == null || RaenStatusDriver.getDuration(unit, member) <= 0f) continue;
                     hits++;
                     if (keep == null || tierOf(member) > tierOf(keep)) keep = member;
                 }
@@ -204,8 +204,8 @@ public class BuffManager {
 
                 for (StatusEffect member : group) {
                     if (member == null || member == keep) continue;
-                    if (unit.getDuration(member) <= 0f) continue;
-                    unit.unapply(member);
+                    if (RaenStatusDriver.getDuration(unit, member) <= 0f) continue;
+                    RaenStatusDriver.unapply(unit, member);
                 }
                 Log.warn("[raen] 互斥组冲突：同一单位同时带有同族多个档位，已保留最高档 " + keep.name
                     + "（单位 id " + unit.id + "）");
@@ -255,10 +255,16 @@ public class BuffManager {
 
         return candidates.get((int) (Math.random() * candidates.size));
     }
-    /** 低出现率效果：标印（「施加领域」那一套标签系统）与残影，比常规效果更难抽到。 */
+    /**
+     * 低出现率效果：标印 / 残影（整族），以及动能反击（整族）与高级扭曲，
+     * 抽取时额外过一道 {@link #LOW_CHANCE}，比常规效果更难抽到。
+     */
     private static boolean isLowChance(StatusEffect effect) {
-        return effect instanceof raen.Bullet.RaenMarkStatus
-            || effect instanceof raen.Enemy.StatusEffectCore.AfterimageEffect;
+        if (effect == null) return false;
+        if (effect instanceof raen.Bullet.RaenMarkStatus) return true;
+        if (effect instanceof raen.Enemy.StatusEffectCore.AfterimageEffect) return true;
+        if (effect instanceof raen.Enemy.StatusEffectCore.KineticCounterEffect) return true;
+        return effect == raenStatusEffects.DistortC;
     }
     /** 未被选中、且不与已选效果同属一个互斥组。 */
     private static boolean isPickable(StatusEffect effect, Seq<StatusEffect> chosen) {
@@ -312,7 +318,7 @@ public class BuffManager {
         // 不依赖 applied 位图，也不受两条实体路径（gen UnitEntity / 组件 StatusComp）差异影响。
         for (StatusEffect effect : allPool) {
             if (effect == null) continue;
-            if (unit.getDuration(effect) > 0f) return true;
+            if (RaenStatusDriver.getDuration(unit, effect) > 0f) return true;
         }
         return false;
     }

@@ -96,9 +96,9 @@ public class RaenLiquidTags {
         def(Liquids.hydrogen, "hydrogen", "9EABF7")
                 .ignite(5f);
 
-        // 氮：命中施加 2 秒冻结和 1 秒静止
+        // 氮：命中叠层，每层 1% 概率触发；触发时 (100+层数)% × 2.5 秒冻结 / 1 秒静止，触发后清层
         def(Liquids.nitrogen, "nitrogen", "EFE3FF")
-                .freeze(2f, 1f);
+                .freeze(2.5f, 1f);
 
         // 氰：参考玻璃，命中处生成碎片（伤害 5%，完全穿甲）
         def(Liquids.cyanogen, "cyanogen", "89E8B6")

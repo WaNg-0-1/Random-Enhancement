@@ -196,7 +196,7 @@ public class AfterimageEffect extends StatusEffect {
         StatusEffect[] tiers = {raenStatusEffects.AfterimageC, raenStatusEffects.AfterimageB,
             raenStatusEffects.AfterimageA};
         for (StatusEffect tier : tiers) {
-            if (tier instanceof AfterimageEffect effect && owner.getDuration(tier) > 0f) {
+            if (tier instanceof AfterimageEffect effect && raen.Enemy.RaenStatusDriver.getDuration(owner, tier) > 0f) {
                 return effect.refundRatio;
             }
         }
@@ -308,6 +308,8 @@ public class AfterimageEffect extends StatusEffect {
 
         // 存档载体：时间 = 剩余寿命 / 本体 id（见 ID_BIN 注释）。id 过大就不写归属，
         // 读档后这个残影会退化成「无主残影」——按剩余寿命自然消散，不结算回血。
+        // ⚠ 这里故意直接用 unit.apply / setDuration，不走 RaenStatusDriver：
+        //   影子表只活在内存里，而标记必须落在原版 statuses 里才能被存档写出去（这是本效果唯一的持久化手段）。
         if (mark != null) clone.apply(mark, LIFE_SECONDS * 60f);
         if (ownerMark != null && owner.id >= 0 && owner.id < ID_MAX) {
             clone.apply(ownerMark, owner.id * ID_BIN + ID_BIAS);

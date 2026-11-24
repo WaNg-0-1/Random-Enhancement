@@ -55,6 +55,8 @@ public class raenMod extends Mod {
         // 放在这里是为了启动期就把所有标签效果拉起来，缺登记能在日志里立刻看到。
         RaenEffectPool.init();
         PVESettings.init();
+        // 影子状态驱动：必须在 BuffManager 挂事件之前初始化，否则单位生成时抽到的强化会漏掉。
+        raen.Enemy.RaenStatusDriver.init();
         BuffManager.init();
         WingmanCleanup.init();
         TeamHealthEffect.registerTick();
@@ -83,7 +85,7 @@ public class raenMod extends Mod {
 }
 /*
 
-git tag v160.4.11
-git push origin v160.4.11
+git tag v160.4.12
+git push origin v160.4.12
 
  */

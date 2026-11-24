@@ -8,6 +8,7 @@ import mindustry.Vars;
 import mindustry.entities.units.StatusEntry;
 import mindustry.gen.Unit;
 import mindustry.type.StatusEffect;
+import raen.Enemy.RaenStatusDriver;
 import raen.Enemy.raenStatusEffects;
 
 /**
@@ -69,9 +70,9 @@ public class SplitEffect extends StatusEffect {
         // 母体的僚机档位：子单位和母体长得一模一样，档位必须一致，
         // 否则会出现「同一个单位同时带高级 + 低级僚机」的观感。
         int wingmanTier = 0;
-        if (unit.getDuration(raenStatusEffects.GenerateWingmanC) > 0f) wingmanTier = 3;
-        else if (unit.getDuration(raenStatusEffects.GenerateWingmanB) > 0f) wingmanTier = 2;
-        else if (unit.getDuration(raenStatusEffects.GenerateWingmanA) > 0f) wingmanTier = 1;
+        if (RaenStatusDriver.getDuration(unit, raenStatusEffects.GenerateWingmanC) > 0f) wingmanTier = 3;
+        else if (RaenStatusDriver.getDuration(unit, raenStatusEffects.GenerateWingmanB) > 0f) wingmanTier = 2;
+        else if (RaenStatusDriver.getDuration(unit, raenStatusEffects.GenerateWingmanA) > 0f) wingmanTier = 1;
 
         for (int i = 0; i < 2; i++) {
             Unit child = unit.type.create(unit.team);
