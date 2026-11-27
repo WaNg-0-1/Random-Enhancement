@@ -132,10 +132,10 @@ public class RaenItemHit extends RaenEffectBase {
     public float phaseShieldBonus = 0.125f;
     /** 布：附带敌方护盾值比例（1.5%） */
     public float phaseShieldRatio = 0.015f;
-    /** 布：附带伤害封顶（× 子弹伤害；250%） */
-    public float phaseShieldCap = 2.5f;
-    /** 布：对盾目标额外附加的真实伤害比例（5% 子弹伤害） */
-    public float phaseShieldTrueRatio = 0.05f;
+    /** 布：附带伤害封顶（× 子弹伤害；175%） */
+    public float phaseShieldCap = 1.75f;
+    /** 布：对盾目标额外附加的真实伤害比例（1% 子弹伤害） */
+    public float phaseShieldTrueRatio = 0.01f;
 
     /** 布：每层「临时盾」提供的生成概率（0.5%） */
     public float phaseShieldChancePerStack = 0.005f;
@@ -153,14 +153,18 @@ public class RaenItemHit extends RaenEffectBase {
 
     /** 合金：闪电条数 */
     public int surgeMin = 1, surgeMax = 4;
-    /** 合金：闪电长度的硬上限（格）—— 无论怎么配都不会超过 10 */
-    public static final float SURGE_MAX_TILES = 10f;
+    /** 合金：闪电长度的硬上限（格）—— 无论怎么配都不会超过 16 */
+    public static final float SURGE_MAX_TILES = 16f;
     /** 合金：闪电长度（格），会被 {@link #SURGE_MAX_TILES} 夹住 */
-    public float surgeLengthMin = 2f, surgeLengthMax = 10f;
+    public float surgeLengthMin = 4f, surgeLengthMax = 16f;
     /** 合金：闪电伤害比例 */
-    public float surgeDamageMin = 0.05f, surgeDamageMax = 0.10f;
-    /** 合金：闪电颜色 */
+    public float surgeDamageMin = 0.025f, surgeDamageMax = 0.075f;
+    /** 合金：连锁层数概率 —— 1 层 66%，2 层 33%，其余（1%）3 层 */
+    public float surgeChainOneChance = 0.66f, surgeChainTwoChance = 0.33f;
+    /** 石墨：麻痹命中特效颜色 */
     public Color surgeColor = Color.valueOf("C9E8FF");
+    /** 合金：闪电颜色（与合金标签配色一致） */
+    public Color surgeLightningColor = Color.valueOf("F3E979");
     /** 布：命中特效颜色 */
     public Color phaseColor = Color.valueOf("F0D8A8");
 
@@ -498,7 +502,7 @@ public class RaenItemHit extends RaenEffectBase {
      *       （层数与护罩都不依赖单位属性）；概率 = 层数 × {@link #phaseShieldChancePerStack}
      *       （0.5%/层，封顶 100%），生成后清空层数。半径 / 时长 / 血量都随层数增长，见各字段；</li>
      *   <li>有盾目标：<b>只对单位</b>（建筑没有护盾），额外 +{@link #phaseShieldBonus 12.5%} 伤害、
-     *       附带 1.5% 护盾值的伤害（封顶 250% 子弹伤害）、并附加 5% 子弹伤害的真实伤害。</li>
+     *       附带 1.5% 护盾值的伤害（封顶 175% 子弹伤害）、并附加 1% 子弹伤害的真实伤害。</li>
      * </ul>
      */
     private void phaseFabricHit(float damage) {
@@ -531,18 +535,22 @@ public class RaenItemHit extends RaenEffectBase {
         }
     }
 
-    /** 合金：1-4 条闪电 + 1 层连锁 */
+    /** 合金：1-4 条闪电 + 66% 1 层 / 33% 2 层 / 1% 3 层连锁 */
     private void surgeHit(float damage) {
         int count = Mathf.random(surgeMin, surgeMax);
-        // 长度取整数格、两端都含（Mathf.random(int,int) 是闭区间）：2-10 就是 2~10 都能摇到
+        // 长度取整数格、两端都含（Mathf.random(int,int) 是闭区间）：4-16 就是 4~16 都能摇到
         int minLen = Math.max(1, (int)surgeLengthMin);
         int maxLen = Math.max(minLen, (int)Math.min(SURGE_MAX_TILES, surgeLengthMax));
         for (int i = 0; i < count; i++) {
             int length = Mathf.random(minLen, maxLen);
             float dmg = damage * Mathf.random(surgeDamageMin, surgeDamageMax);
-            Lightning.create(ctxTeam, surgeColor, dmg, ctxX, ctxY, Mathf.random(360f), length);
+            Lightning.create(ctxTeam, surgeLightningColor, dmg, ctxX, ctxY, Mathf.random(360f), length);
         }
-        RaenEffectLS.INSTANCE.applyTo(ctxTarget, 1, ctxTeam, damage);
+
+        float roll = Mathf.random();
+        int chainStacks = roll < surgeChainOneChance ? 1
+                : roll < surgeChainOneChance + surgeChainTwoChance ? 2 : 3;
+        RaenEffectLS.INSTANCE.applyTo(ctxTarget, chainStacks, ctxTeam, damage);
     }
 
     /**

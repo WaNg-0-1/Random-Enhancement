@@ -3,10 +3,13 @@ import arc.Core;
 import arc.Events;
 import mindustry.Vars;
 import mindustry.game.EventType;
+import raen.Bullet.RaenApplyBlock;
 public class PVESettings {
     public static final String KEY_DIFFICULTY = "raen-pve-difficulty";
     /** 「作用于所有单位」开关，默认关闭。 */
     public static final String KEY_ALL_TEAMS  = "raen-pve-all-teams";
+    /** 「核心自带 0 层能量施加领域」开关，默认关闭。 */
+    public static final String KEY_CORE_FIELD = "raen-pve-core-field";
     public static final int OFF    = 0;
     public static final int EASY   = 1;
     public static final int HARD   = 2;
@@ -30,6 +33,8 @@ public class PVESettings {
     private PVESettings() {}
     public static void init() {
         Events.on(EventType.ClientLoadEvent.class, event -> registerSlider());
+        // 启动时把存档里的开关值灌给核心领域系统（注册已在 RaenBlocks.loadContent 里完成）
+        RaenApplyBlock.CoreFields.setEnabled(isCoreFieldEnabled());
     }
     public static int getDifficulty() {
         if (Core.settings == null) return DEFAULT;
@@ -49,6 +54,15 @@ public class PVESettings {
     public static boolean isAllTeams() {
         if (Core.settings == null) return false;
         return Core.settings.getBool(KEY_ALL_TEAMS, false);
+    }
+
+    /**
+     * 核心是否自带 0 层能量的不可变施加领域（默认关闭）。
+     * 领域只挂主标签、不挂物品 / 液体标签；具体逻辑在 {@link RaenApplyBlock.CoreFields}。
+     */
+    public static boolean isCoreFieldEnabled() {
+        if (Core.settings == null) return false;
+        return Core.settings.getBool(KEY_CORE_FIELD, false);
     }
     public static float getDifficultyMultiplier() {
         switch (getDifficulty()) {
@@ -94,6 +108,9 @@ public class PVESettings {
                 );
                 // 难度滑块下方的开关：开启后强化从「仅敌方」变为「所有队伍」。
                 table.checkPref(KEY_ALL_TEAMS, false);
+                // 第二个开关：地图内的核心自带 0 层能量正方形施加领域（只挂主标签）。
+                // 用带回调的重载：点一下立即生效，不用等下次进图 / 下次扫描。
+                table.checkPref(KEY_CORE_FIELD, false, value -> RaenApplyBlock.CoreFields.setEnabled(value));
             });
         } catch (Exception e) {
             arc.util.Log.err("raen-pve: 难度滑块注册失败", e);

@@ -57,5 +57,8 @@ public class RaenBlocks {
 
         // 范围圈画在全局绘制里：这样方块本体离屏时圈也不会消失（画在 build.draw() 里会被剔除）
         Events.run(Trigger.draw, RaenApplyBlock::drawAllRanges);
+        // 核心自带的 0 层能量正方形领域：注册逐帧跟随 + 5 秒扫描 + 全局绘制钩子。
+        // 真正的开关在 PVESettings，启动时会调用 CoreFields.setEnabled(...) 把存档值灌进来。
+        RaenApplyBlock.CoreFields.register();
     }
 }

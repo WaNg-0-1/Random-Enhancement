@@ -7,6 +7,8 @@ import arc.graphics.g2d.Fill;
 import arc.graphics.g2d.Font;
 import arc.graphics.g2d.Lines;
 import arc.math.Mathf;
+import arc.struct.ObjectFloatMap;
+import arc.struct.ObjectIntMap;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
 import arc.util.Time;
@@ -26,12 +28,14 @@ import static raen.Bullet.RaenEffectText.num;
  * 效果 —— 中毒 / 毒圈（ZhongDu）
  * <p>
  * 移植自测试模组的 {@code FzEffectZD}，只改了包名、类名与子弹标签名。
- * 子弹命中目标叠加中毒层数，每 0.5 秒结算伤害，并按层数分档减速（10 档 + 不减速档）；
+ * 子弹命中目标叠加中毒层数，满血每 1 秒结算一次、随血量降低线性提速到濒死每秒 10 次，
+ * 并按层数分档减速（10 档 + 不减速档）；
  * 目标死亡时残留毒圈，毒圈按「水池」机制扣血并合并。单位与建筑都生效。
  * <p>
- * 结算前会先做「处决」判定：每层提供「0.1% 已损失生命 + 3 点」的斩杀伤害，
- * 两部分相加后封顶在「已损失生命的 20%」；当前血量低于斩杀伤害时直接击杀，
- * 且<b>不消耗层数</b>，让死亡后续效果（毒圈、其它效果 onDeath）拿到完整层数。
+ * 结算前会先做「处决」判定：每层提供「0.05% 已损失生命 + 2.5 点」的斩杀伤害，
+ * 两部分相加后封顶在「已损失生命的 11.11%」；血量低于斩杀线时不再直接击杀，
+ * 而是每次结算有 0.33% 概率斩杀，失败后下次 +0.33%（约 303 次必中），回到斩杀线以上则重置。
+ * 斩杀<b>不消耗层数</b>，让死亡后续效果（毒圈、其它效果 onDeath）拿到完整层数。
  * <p>
  * 减速用 {@link #DUSU_TIERS} 一组**固定**的状态实例，绝不修改共享实例的字段
  * （否则多单位同时中毒时会互相覆盖倍率）。
@@ -88,27 +92,31 @@ public class RaenEffectZD extends RaenEffectBase {
     public float normalPartRatio = 0.75f;
     /** 每层伤害里走真实伤害的比例（0.25 → 0.025/层） */
     public float truePartRatio = 0.25f;
-    /** 中毒结算间隔（tick，30 = 0.5 秒） */
-    public float unitInterval = 30f;
+    /** 满血时的中毒结算间隔（tick，60 = 1 秒） */
+    public float unitInterval = 60f;
+    /** 濒死时的中毒结算间隔（tick，6 = 每秒 10 次），按血量线性插值 */
+    public float minUnitInterval = 6f;
     /** 毒圈结算间隔（tick，60 = 1 秒） */
     public float fieldInterval = 60f;
     /** 死亡时残留毒圈的半径 */
     public float fieldRadius = 48f;
     /** 减速状态持续时间 */
     public float slowDuration = 120f;
-    /** 处决·百分比部分：每层提供的「已损失生命比例」斩杀伤害（0.001 = 0.1%/层） */
-    public float executePercentPerStack = 0.001f;
+    /** 处决·百分比部分：每层提供的「已损失生命比例」斩杀伤害（0.0005 = 0.05%/层） */
+    public float executePercentPerStack = 0.0005f;
     /** 处决·固定部分：每层额外提供的固定斩杀伤害（点数，不与百分比部分分开封顶） */
-    public float executeFlatPerStack = 3f;
+    public float executeFlatPerStack = 2.5f;
     /**
      * 处决·总伤害上限（占「已损失生命」比例，0.2 = 20%）。
      * 百分比与固定部分<b>相加后</b>一起受它约束。
      * <p>
      * 上限随已损失生命增长，斩杀线被自然压在 {@code hp/H < r/(1+r)} 以下
-     * （0.2 → 约 16.7% 血）；满血时上限为 0，不可能触发。
+     * （0.1111 → 约 10% 血）；满血时上限为 0，不可能触发。
      * 设为 &lt;= 0 表示不封顶。
      */
-    public float executeDamageCapRatio = 0.2f;
+    public float executeDamageCapRatio = 0.1111f;
+    /** 斩杀基础概率：血量低于斩杀线时每次结算 0.33%，失败后每次 +0.33%（封顶 100%） */
+    public float executeProcChance = 0.0033f;
     /** 层数 / 毒圈水量文字缩放（1 = 默认大小；越小越不挡视线） */
     public float textScale = 0.25f;
     /** 毒圈呼吸动画速度（弧度/帧，0.05 ≈ 2 秒一次；调大就会开始"抖"） */
@@ -119,7 +127,10 @@ public class RaenEffectZD extends RaenEffectBase {
     public Color fieldColor = Color.valueOf("6bff6b");
 
     private final Seq<PoisonField> poisonFields = new Seq<>();
-    private float unitTimer = 0f;
+    /** 每个中毒目标自己的结算计时（按当前血量比例算间隔） */
+    private final ObjectFloatMap<Healthc> poisonTimers = new ObjectFloatMap<>();
+    /** 每个目标「低于斩杀线但没斩掉」的累计失败次数：概率 = (次数+1) × 1% */
+    private final ObjectIntMap<Healthc> executeMisses = new ObjectIntMap<>();
     private float fieldTimer = 0f;
 
     private final RaenEffectText text;
@@ -171,11 +182,25 @@ public class RaenEffectZD extends RaenEffectBase {
         }
         poisonFields.remove(field -> field.removed);
 
-        // --- 1. 中毒结算（每 0.5 秒） ---
-        unitTimer += delta;
-        if (unitTimer >= unitInterval) {
-            unitTimer = 0f;
-            tickPoisoned();
+        // --- 1. 中毒结算：每个目标按自身血量比例决定间隔（满血 1 秒 ↔ 濒死 0.1 秒） ---
+        if (layers.size > 0) {
+            Seq<Healthc> targets = new Seq<>();
+            for (ObjectMap.Entry<Healthc, Integer> entry : layers) targets.add(entry.key);
+
+            for (int i = 0; i < targets.size; i++) {
+                Healthc target = targets.get(i);
+                if (target == null || target.dead() || layer(target) <= 0) {
+                    clearLayer(target);
+                    continue;
+                }
+                float timer = poisonTimers.get(target, 0f) + delta;
+                if (timer >= intervalOf(target)) {
+                    poisonTimers.put(target, 0f);
+                    tickPoisoned(target);
+                } else {
+                    poisonTimers.put(target, timer);
+                }
+            }
         }
 
         // --- 2. 毒圈结算与合并（每 1 秒） ---
@@ -186,51 +211,51 @@ public class RaenEffectZD extends RaenEffectBase {
         }
     }
 
-    private void tickPoisoned() {
-        if (layers.size == 0) return;
+    /** 结算间隔：满血 unitInterval，濒死 minUnitInterval，线性插值。 */
+    private float intervalOf(Healthc target) {
+        float hp = target.health(), max = target.maxHealth();
+        float frac = max > 0f ? Mathf.clamp(hp / max, 0f, 1f) : 1f;
+        return Mathf.lerp(minUnitInterval, unitInterval, frac);
+    }
 
-        Seq<Healthc> snapshot = new Seq<>();
-        for (ObjectMap.Entry<Healthc, Integer> entry : layers) {
-            snapshot.add(entry.key);
+    /** 单个目标的结算：处决判定 → 伤害 → 减速 → 层数 -1。 */
+    private void tickPoisoned(Healthc target) {
+        int stacks = layer(target);
+        if (target == null || target.dead() || stacks <= 0) {
+            clearLayer(target);
+            return;
         }
 
-        for (int i = 0; i < snapshot.size; i++) {
-            Healthc target = snapshot.get(i);
-            int stacks = layer(target);
-            if (target == null || target.dead() || stacks <= 0) {
-                clearLayer(target);
-                continue;
-            }
+        // ★ 处决判定必须在「造成伤害 / 层数-1」之前：层数原封不动地留给死亡后续效果
+        if (tryExecute(target, stacks)) return;
 
-            // ★ 处决判定必须在「造成伤害 / 层数-1」之前：层数原封不动地留给死亡后续效果
-            if (tryExecute(target, stacks)) continue;
+        float damage = stacks * damagePerStack;
+        float scale = (target instanceof Unit && ((Unit) target).type instanceof MissileUnitType) ? 2f : 1f;
 
-            float damage = stacks * damagePerStack;
-            float scale = (target instanceof Unit && ((Unit) target).type instanceof MissileUnitType) ? 2f : 1f;
+        target.damage(damage * normalPartRatio * scale);
+        trueDamage(target, damage * truePartRatio * scale);
 
-            target.damage(damage * normalPartRatio * scale);
-            trueDamage(target, damage * truePartRatio * scale);
-
-            if (target.dead()) {
-                clearLayer(target);
-                continue;
-            }
-
-            if (target instanceof Unit) {
-                // 按层数选档：0 层不减速、STACKS_FOR_FROZEN 层时降到下限 10%（不再减到 0）
-                int tier = Mathf.clamp((int) (stacks / (STACKS_FOR_FROZEN / SLOW_TIERS) + 0.5f), 0, SLOW_TIERS);
-                if (tier > 0) {
-                    // ★ 只 apply、不改实例：每个档位都是固定的独立状态，多单位同时中毒互不影响
-                    ((Unit) target).apply(DUSU_TIERS[tier], slowDuration);
-                }
-            }
-
-            setLayer(target, stacks - 1);
+        if (target.dead()) {
+            clearLayer(target);
+            return;
         }
+
+        if (target instanceof Unit) {
+            // 按层数选档：0 层不减速、STACKS_FOR_FROZEN 层时降到下限 10%（不再减到 0）
+            int tier = Mathf.clamp((int) (stacks / (STACKS_FOR_FROZEN / SLOW_TIERS) + 0.5f), 0, SLOW_TIERS);
+            if (tier > 0) {
+                // ★ 只 apply、不改实例：每个档位都是固定的独立状态，多单位同时中毒互不影响
+                ((Unit) target).apply(DUSU_TIERS[tier], slowDuration);
+            }
+        }
+
+        setLayer(target, stacks - 1);
     }
 
     /**
-     * 处决：每层提供 {@code 0.1% × 已损失生命 + 3 点} 的斩杀伤害，
+     * 处决：每层提供 {@code 0.05% × 已损失生命 + 2.5 点} 的斩杀伤害（封顶已损失生命 11.11%）。
+     * 血量低于斩杀线时不再直接击杀：每次结算按「1% + 累计失败次数×1%」掷一次，
+     * 失败则累计 +1；血量回到斩杀线以上时清零。斩杀不消耗层数。
      */
     private boolean tryExecute(Healthc target, int stacks) {
         if (stacks <= 0 || target == null || target.dead()) return false;
@@ -241,7 +266,10 @@ public class RaenEffectZD extends RaenEffectBase {
         if (Float.isNaN(hp) || Float.isNaN(max) || hp <= 0f || max <= 0f) return false;
 
         float lost = max - hp;
-        if (lost <= 0f) return false;                      // 满血 / 超血一律不斩
+        if (lost <= 0f) {                      // 满血 / 超血：重置累计概率
+            executeMisses.remove(target, 0);
+            return false;
+        }
 
         float percentPart = Math.max(0f, stacks * executePercentPerStack) * lost;
         float flatPart = Math.max(0f, stacks * executeFlatPerStack);
@@ -252,7 +280,18 @@ public class RaenEffectZD extends RaenEffectBase {
         if (executeDamageCapRatio > 0f) {
             executeDamage = Math.min(executeDamage, executeDamageCapRatio * lost);
         }
-        if (executeDamage <= 0f || hp >= executeDamage) return false;   // 严格「小于」才击杀
+        if (executeDamage <= 0f || hp >= executeDamage) {
+            executeMisses.remove(target, 0);   // 回到斩杀线以上：叠加概率重置
+            return false;
+        }
+
+        int misses = executeMisses.get(target, 0);
+        float chance = Mathf.clamp((misses + 1) * executeProcChance, 0f, 1f);
+        if (Mathf.random() >= chance) {
+            executeMisses.put(target, misses + 1);
+            return false;
+        }
+        executeMisses.remove(target, 0);
 
         target.kill();
 
@@ -501,9 +540,19 @@ public class RaenEffectZD extends RaenEffectBase {
     }
 
     @Override
+    public void clearLayer(Healthc target) {
+        super.clearLayer(target);
+        if (target != null) {
+            poisonTimers.remove(target, 0f);
+            executeMisses.remove(target, 0);
+        }
+    }
+
+    @Override
     public void onReset() {
         poisonFields.clear();
-        unitTimer = 0f;
+        poisonTimers.clear();
+        executeMisses.clear();
         fieldTimer = 0f;
     }
 
@@ -524,7 +573,7 @@ public class RaenEffectZD extends RaenEffectBase {
 
     public String describe() {
         return Core.bundle.format("raen.tag.zd.title", text.color) + "\n" +
-                Core.bundle.format("raen.tag.zd.l1", num(unitInterval / 60f),
+                Core.bundle.format("raen.tag.zd.l1",
                         num(damagePerStack * normalPartRatio), num(damagePerStack * truePartRatio)) + "\n" +
                 Core.bundle.format("raen.tag.zd.l2", (int) (fieldRadius / 8)) + "\n" +
                 Core.bundle.format("raen.tag.zd.l3", num(executePercentPerStack * 100f),

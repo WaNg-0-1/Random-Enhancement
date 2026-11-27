@@ -39,6 +39,7 @@ import mindustry.gen.Icon;
 import mindustry.gen.Teamc;
 import mindustry.gen.Unit;
 import mindustry.game.Team;
+import mindustry.game.EventType;
 import mindustry.game.EventType.Trigger;
 import mindustry.graphics.Drawf;
 import mindustry.graphics.Layer;
@@ -49,6 +50,7 @@ import mindustry.type.ItemStack;
 import mindustry.type.Liquid;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
+import mindustry.world.blocks.storage.CoreBlock;
 import mindustry.world.draw.DrawBlock;
 import mindustry.world.draw.DrawDefault;
 import mindustry.world.meta.BlockGroup;
@@ -251,8 +253,8 @@ public class RaenApplyBlock extends Block {
      * ★ 这个功能<b>只针对物品</b>：液体一律随机挂载，不提供指定。
      */
     public int guaranteeUnlockTags = 2;
-    /** 必带物品图标：相对方块边长的尺寸（3 格方块 0.7 → 约 17px） */
-    public float guaranteeIconScale = 0.7f;
+    /** 必带物品图标：相对方块边长的尺寸（3 格方块 0.33 → 8px，正好 1 格） */
+    public float guaranteeIconScale = 0.33f;
     /** 必带「已选但当前不生效」（断电 / 名额不足）时的图标透明度 */
     public float guaranteeIconInactiveAlpha = 0.35f;
 
@@ -397,6 +399,172 @@ public class RaenApplyBlock extends Block {
         for (Building build : Groups.build) {
             if (build instanceof RaenApplyBlockBuild && build.isValid()) {
                 ((RaenApplyBlockBuild) build).drawRange();
+            }
+        }
+    }
+
+    // ==================== 核心自带的 0 层能量领域 ====================
+
+    /**
+     * 核心附带的「不可变施加领域」：由设置里的开关控制，不占用地图方块、不进存档。
+     * <p>
+     * 每个 {@link CoreBlock} 对应一个虚实例：与核心同心、同阵营，范围是<b>正方形</b>，
+     * 边长 = 核心边长 × 1.25（{@code CoreFields.CORE_FIELD_SIDE_SCALE}）。它只有 0 层能量，因此只挂
+     * {@link #mainLadder} 里 energy=0 的主标签（默认追击），<b>绝不挂物品 / 液体标签</b>，
+     * 也不耗电、不削弹、没有配置面板。
+     * <p>
+     * 生命周期跟着核心走：逐帧检查核心是否有效（核心被击破 ⇒ 领域立刻消失），
+     * 阵营随时从核心实时读取（占领 ⇒ 领域跟着换队）；每 5 秒（{@code CoreFields.SCAN_INTERVAL}）
+     * 全图扫一次，用来发现新建造 / 占领后新出现的核心。
+     */
+    public static final class CoreFields {
+        /** 正方形边长相对核心边长的倍数。 */
+        private static final float CORE_FIELD_SIDE_SCALE = 1.25f;
+        /** 全图扫描间隔（tick = 1/60 秒），默认 5 秒。 */
+        private static final float SCAN_INTERVAL = 5f * 60f;
+        /** 找不到方块实例时的兜底边框色（正常取 {@link RaenApplyBlock#waveColor}）。 */
+        private static final Color CORE_FIELD_COLOR = Color.valueOf("6b9eff");
+
+        private static final Seq<CoreField> fields = new Seq<>();
+        private static float scanTimer = SCAN_INTERVAL;
+        private static boolean enabled = false;
+        private static boolean registered = false;
+
+        private CoreFields() {}
+
+        /** 注册全局钩子；重复调用安全（内容加载阶段只调一次）。 */
+        public static void register() {
+            if (registered) return;
+            registered = true;
+            Events.run(Trigger.update, CoreFields::update);
+            Events.run(Trigger.draw, CoreFields::drawAll);
+            Events.on(EventType.WorldLoadEvent.class, e -> reset());
+        }
+
+        /** 设置界面开关回调：开启时立即全图扫描，关闭时清空所有虚领域。 */
+        public static void setEnabled(boolean on) {
+            enabled = on;
+            if (!on) {
+                fields.clear();
+                scanTimer = 0f;
+            } else {
+                // 下一帧 update 就会立刻扫一次，不必等满 5 秒
+                scanTimer = SCAN_INTERVAL;
+            }
+        }
+
+        private static void reset() {
+            fields.clear();
+            scanTimer = SCAN_INTERVAL;
+        }
+
+        private static void update() {
+            if (!enabled) return;
+            if (Vars.state == null || !Vars.state.isGame() || Vars.state.isPaused()) return;
+            if (Vars.world == null) return;
+
+            // 逐帧跟随核心：位置 / 阵营实时读取，核心没了就当场移除
+            for (int i = fields.size - 1; i >= 0; i--) {
+                CoreField field = fields.get(i);
+                if (!field.isValid()) {
+                    fields.remove(i);
+                    continue;
+                }
+                field.apply();
+            }
+
+            scanTimer += Time.delta;
+            if (scanTimer < SCAN_INTERVAL) return;
+            scanTimer = 0f;
+            scan();
+        }
+
+        /** 全图找核心，补上缺失的虚领域（不重复添加）。 */
+        private static void scan() {
+            if (Vars.world == null) return;
+            for (int i = fields.size - 1; i >= 0; i--) {
+                if (!fields.get(i).isValid()) fields.remove(i);
+            }
+            for (Building build : Groups.build) {
+                if (!build.isValid() || !(build.block instanceof CoreBlock)) continue;
+                boolean exists = false;
+                for (int i = 0; i < fields.size; i++) {
+                    if (fields.get(i).core == build) { exists = true; break; }
+                }
+                if (!exists) fields.add(new CoreField(build));
+            }
+        }
+
+        private static void drawAll() {
+            if (!enabled || Vars.state == null || !Vars.state.isGame() || Vars.world == null) return;
+            for (int i = 0; i < fields.size; i++) fields.get(i).draw();
+        }
+
+        /** 只挂 0 能量档的主标签；主标签来自方块定义，改阶梯时这里自动跟着变。 */
+        private static void attachCoreMains(Bullet bullet) {
+            if (!(RaenBlocks.applyField instanceof RaenApplyBlock)) return;
+            RaenApplyBlock block = (RaenApplyBlock) RaenBlocks.applyField;
+            Seq<MainTag> ladder = block.mainLadder;
+            for (int i = 0; i < ladder.size; i++) {
+                MainTag tag = ladder.get(i);
+                if (tag == null || tag.effect == null || tag.energy > 0) continue;
+                tag.effect.attach(bullet, Math.max(1, tag.stacks));
+            }
+        }
+
+        /** 单个核心的虚领域：只存核心引用，位置 / 阵营 / 半径每次现算。 */
+        private static final class CoreField {
+            final Building core;
+
+            CoreField(Building core) {
+                this.core = core;
+            }
+
+            boolean isValid() {
+                return core != null && core.isValid() && core.tile != null && core.block instanceof CoreBlock;
+            }
+
+            /** 正方形半边长（世界单位）：核心边长 = 格数 × 8 像素。 */
+            float halfSide() {
+                return core.block.size * 8f * CORE_FIELD_SIDE_SCALE * 0.5f;
+            }
+
+            void apply() {
+                float half = halfSide();
+                if (half <= 0f) return;
+                final float x = core.x, y = core.y;
+                final Team team = core.team;
+
+                Groups.bullet.intersect(x - half, y - half, half * 2f, half * 2f, bullet -> {
+                    if (bullet == null || bullet.team != team) return;
+                    // intersect 给的是外接矩形，正方形判定还差一步 |dx|/|dy|
+                    if (Math.abs(bullet.x - x) > half || Math.abs(bullet.y - y) > half) return;
+                    // 与普通领域一致：碎片不再挂标签、临时盾不是命中体、持续型会被高频放大
+                    if (RaenBulletMarks.hasBulletMark(bullet, RaenShards.NO_TAG)) return;
+                    if (bullet.type == RaenShieldBullet.type) return;
+                    if (isContinuousType(bullet.type)) return;
+                    attachCoreMains(bullet);
+                });
+            }
+
+            void draw() {
+                if (!isValid()) return;
+                float half = halfSide();
+                float x = core.x, y = core.y;
+                Color color = CORE_FIELD_COLOR;
+                if (RaenBlocks.applyField instanceof RaenApplyBlock) {
+                    Color configured = ((RaenApplyBlock) RaenBlocks.applyField).waveColor;
+                    if (configured != null) color = configured;
+                }
+
+                float prevZ = Draw.z();
+                Draw.z(Layer.effect);
+                Lines.stroke(1.5f);
+                // dashRect 的 x/y 是左上角（不是中心），所以这里要减去半边长
+                Drawf.dashRect(color, x - half, y - half, half * 2f, half * 2f);
+                Lines.stroke(1f);
+                Draw.color();
+                Draw.z(prevZ);
             }
         }
     }

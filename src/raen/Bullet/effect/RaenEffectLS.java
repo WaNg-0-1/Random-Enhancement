@@ -64,17 +64,19 @@ public class RaenEffectLS extends RaenEffectBase {
         addLayer(ctxTarget, Math.max(1, ctxStacks));
         int stacks = layer(ctxTarget);
 
-        if (ctxBullet == null) return;
+        // ★ 合金等「直接 applyTo」路径没有子弹：伤害由 trigger 传进来的 ctxDamage 提供，
+        //   不能因为 ctxBullet == null 就提前 return，否则连锁永远不会触发。
         if (Mathf.random() >= (baseTriggerPercent + stacks) / 100f) return;
 
-        float damage = ctxBullet.damage * (baseDamagePercent + stacks) / 100f;
+        float damage = ctxDamage * (baseDamagePercent + stacks) / 100f;
         if (damage <= 0f) return;
 
         Team team = ctxTeam != null ? ctxTeam : teamOf(ctxTarget);
-        spawn(team, ctxTarget.x(), ctxTarget.y(), damage, stacks);
 
-        // 触发后清空层数，否则下一次命中会立刻再次触发
+        // 触发后立刻清空层数，否则下一次命中会立刻再次触发；
+        // 放在 spawn 之前，连锁子弹创建失败时也不会把层数留在目标身上。
         clearLayer(ctxTarget);
+        spawn(team, ctxTarget.x(), ctxTarget.y(), damage, stacks);
     }
 
     private void spawn(Team team, float x, float y, float damage, int stacks) {

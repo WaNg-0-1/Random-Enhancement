@@ -22,7 +22,7 @@ import mindustry.world.Tile;
 import raen.Enemy.raenStatusEffects;
 
 /**
- * 残影：每 {@link #SNAPSHOT_INTERVAL} 快照一次携带者的血量。
+ * 残影：按 {@link #snapshotInterval} 快照一次携带者的血量（低 / 中 2 秒，高级 1.5 秒）。
  * <p>
  * 两次快照之间血量有衰减（后一次快照低于前一次）时，按「两次快照的差值」在自身周围
  * 生成一个<b>同类型</b>的分身（武器 / 能力天然继承，走原版的 {@link GroundAI} / {@link FlyingAI}
@@ -45,8 +45,10 @@ import raen.Enemy.raenStatusEffects;
  */
 public class AfterimageEffect extends StatusEffect {
 
-    /** 快照间隔：2 秒（60 tick/秒）。 */
+    /** 默认快照间隔：2 秒（60 tick/秒）；高级档可覆盖为 1.5 秒。 */
     public static final float SNAPSHOT_INTERVAL = 60f * 2f;
+    /** 本档的快照 / 生成间隔（tick）。 */
+    public float snapshotInterval = SNAPSHOT_INTERVAL;
     /** 残影存在时长：4 秒。 */
     public static final float LIFE_SECONDS = 4f;
     /**
@@ -256,8 +258,8 @@ public class AfterimageEffect extends StatusEffect {
         }
 
         st.timer += Time.delta;
-        if (st.timer < SNAPSHOT_INTERVAL) return;
-        st.timer %= SNAPSHOT_INTERVAL;
+        if (st.timer < snapshotInterval) return;
+        st.timer %= snapshotInterval;
 
         float snapshot = unit.health;
         float loss = st.lastSnapshot - snapshot;

@@ -69,7 +69,7 @@ public class raenStatusEffects {
     // ---- 动能反击：每 1 秒快照血+盾，衰减时原地发射动能导弹（40 格射程 / 60 格追踪）----
     public static StatusEffect KineticCounterA, KineticCounterB, KineticCounterC; // 1~3 / 1~5 / 1~7 枚，倍率 1.5→3 / 4.5 / 6
 
-    // ---- 残影：每 2 秒快照血量，有衰减就按差值生成一个分身，自然消散时回血 ----
+    // ---- 残影：低/中每 2 秒、高级每 1.5 秒快照血量，有衰减就按差值生成一个分身，自然消散时回血 ----
     public static StatusEffect AfterimageA, AfterimageB, AfterimageC;     // 1/2/3 个分身，回血 50%/75%/100%
 
     // ---- 12 个纯数值效果 ----
@@ -367,12 +367,12 @@ public class raenStatusEffects {
         addToContent(KineticCounterB);
         KineticCounterC = makeKineticCounter("KineticCounterC", 7, 6f, COLOR_KC_C);
         addToContent(KineticCounterC);
-        // ============ 残影：每 2 秒快照，衰减差值为分身血量，存续 4 秒，1/2/3 个，消散回血 50%/75%/100% ============
-        AfterimageA = makeAfterimage("AfterimageA", 1, 0.50f, COLOR_AFTERIMAGE_A);
+        // ============ 残影：低/中 2 秒、高级 1.5 秒快照，分身血量=衰减差值，存续 4 秒，1/2/3 个，回血 50%/75%/100% ============
+        AfterimageA = makeAfterimage("AfterimageA", 1, 0.50f, AfterimageEffect.SNAPSHOT_INTERVAL, COLOR_AFTERIMAGE_A);
         addToContent(AfterimageA);
-        AfterimageB = makeAfterimage("AfterimageB", 2, 0.75f, COLOR_AFTERIMAGE_B);
+        AfterimageB = makeAfterimage("AfterimageB", 2, 0.75f, AfterimageEffect.SNAPSHOT_INTERVAL, COLOR_AFTERIMAGE_B);
         addToContent(AfterimageB);
-        AfterimageC = makeAfterimage("AfterimageC", 3, 1.00f, COLOR_AFTERIMAGE_C);
+        AfterimageC = makeAfterimage("AfterimageC", 3, 1.00f, 60f * 1.5f, COLOR_AFTERIMAGE_C);
         addToContent(AfterimageC);
 
         // ============ BulletSpawn（中级）============
@@ -600,10 +600,12 @@ public class raenStatusEffects {
         return effect;
     }
 
-    private static StatusEffect makeAfterimage(String name, int maxClones, float refundRatio, Color color) {
+    private static StatusEffect makeAfterimage(String name, int maxClones, float refundRatio,
+                                               float snapshotInterval, Color color) {
         AfterimageEffect effect = new AfterimageEffect(name, maxClones, refundRatio);
         effect.damage = 0f;
         effect.transitionDamage = 0f;
+        effect.snapshotInterval = snapshotInterval;
         effect.color = color;
         return effect;
     }
@@ -666,7 +668,7 @@ public class raenStatusEffects {
      *       短时爆发 10秒连5秒×3（21 格，3 目标）/ 血量转移 125%（21 格，敌3己2）/ 分裂 低于50%→2×35% / 共享回复 受伤6%、治疗12%（20 格，7 人）/ 弹幕环绕 每10秒控2.5秒（2.5×抓、2×绕）
      *       浴血 攻击 +0→400%、攻速 +0→280%、移速 +0→320%（开火后激活，每秒扣当前生命1%）
      *       玻璃大炮 生命10%/伤1000% | 轻装 生命20%/速750%/攻速175% | 重装 速15%/生命480%/伤250% | 刮痧 攻速400%/伤29% / 势大力沉 攻速10%/伤1500% / 幽影 30格9秒 / 扭曲 碰撞+3格·1.3秒·冷却9秒 / 回收 20格/3槽/存9/5秒 / 标印 碰撞×2.5·3标签
-     *       残影 每2秒快照、3 个、存续4秒、消散回血100%（低出现率）
+     *       残影 每1.5秒快照、3 个、存续4秒、消散回血100%（低出现率）
      *       行者 疾步 +0→600% / 动能 +0→300% / 追击 +0→300%（代价同低级）
      *       吞噬 每10秒 / 回血 75%
      *       动能反击 1~7 枚 / 倍率 1.5→6
